@@ -10,6 +10,12 @@ detección de entorno y un indicador vivo del estado de la sesión.
 | **Blood Red** | `#ff5c47` coral | cálido: coral, terracota, vino sobre fondo oscuro |
 | **Electric Blue** | `#2e8bff` azul | frío: cian, azure, azul profundo sobre fondo oscuro |
 
+![Electric Blue (izquierda) y Blood Red (derecha) en Claude Code](assets/preview.png)
+
+*Izquierda: **Electric Blue** (prompts, picker y selección en azul). Derecha:
+**Blood Red** (prompts coral y la statusline de 3 líneas con el indicador de vida
+de sesión).*
+
 ## Contenido
 
 - `themes/blood-red.json` — tema cálido instalable vía `/theme`
