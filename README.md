@@ -116,9 +116,20 @@ La tarjeta son cinco filas de 14 celdas, todo centrado al ancho del sprite:
 
 El bicho son 14×6 píxeles en tres filas de texto, con medios bloques para la
 resolución vertical. El cuerpo apoya en `▀` y cada pata baja a `█`, que es lo que
-deja el hueco entre patas. Los ojos son texto negro sobre el cuerpo pintado a
-**color de fondo**, así que salen recortados dentro de la silueta en vez de
-flotando al lado, que es como se leerían si fueran caracteres sueltos.
+deja el hueco entre patas.
+
+Los ojos van **tallados** en el cuerpo: el tronco se pinta a color de fondo y
+encima se dibuja en negro con medios bloques, de modo que cada ojo ocupa **2×2
+celdas** repartidas entre la fila de la cabeza y la del tronco. Eso es lo que
+permite que el chevron del logo salga de verdad —
+
+```
+▀▄        ▄▀
+▄▀        ▀▄
+```
+
+— en vez de un `>` de una sola celda, que a este tamaño se lee como un carácter
+de texto pegado al dibujo y no como parte de él.
 
 **El cuerpo va del color del estado**, el mismo que la etiqueta y la barra: no
 tiene sentido un bicho azul brillante con la barra de vida en rojo. Cada estado
@@ -126,26 +137,32 @@ tiene además su versión:
 
 | Vida | Ojos | Postura |
 | --- | --- | --- |
-| ≥95 | `>` `<` | de pie, anda, con destello en la etiqueta |
-| ≥80 | `>` `<` | de pie, anda |
-| ≥60 | `•` `•` | de pie, anda |
-| ≥40 | `-` `-` | de pie, ya no anda |
-| ≥20 | `~` `~` | hundido (media cabeza), quieto |
-| <20 | `×` `×` | hundido, quieto |
-| k.o. | `✖` `✖` | tumbado: sin cabeza ni patas, y en gris |
+| ≥95 | chevron `>` `<` | de pie, anda, con destello en la etiqueta |
+| ≥80 | chevron `>` `<` | de pie, anda |
+| ≥60 | redondos | de pie, anda |
+| ≥40 | entrecerrados | de pie, ya no anda |
+| ≥20 | párpados caídos | hombros caídos, quieto |
+| <20 | aspas | hombros caídos, quieto |
+| k.o. | aspas | **patas al aire**, cuerpo tumbado debajo, en gris |
 
-Parpadea de `>` `<` a `-` `-` un frame de cada seis, mientras le quede cuerda.
+Animaciones, todas al techo de 1 fps:
+
+- **anda** — ciclo de cuatro fotogramas: la onda recorre las tres patas de fuera a
+  dentro. Cuatro segundos de cada doce; con `STATUSLINE_MASCOT_WALK=1`, siempre.
+- **parpadea** — un fotograma de cada siete. Por debajo de 40 de vida el parpadeo
+  se vuelve más lento y pesado (uno de cada cuatro, a párpados caídos).
+- **espasmo** — ya muerto, una pata da un tirón cada nueve segundos.
 
 **Por qué la fila 1 se queda libre:** Claude Code pinta sus propios badges
 alineados a la derecha de la primera fila de la statusline. La tarjeta arranca en
 la fila 2 para no chocar con ellos.
 
-**Animación.** El techo real son **1 fps**: la statusline se re-ejecuta por
-eventos (con *debounce* de 300 ms) y en reposo solo si defines `refreshInterval`,
-cuyo mínimo es `1` segundo. Con eso la mascota parpadea (1 de cada 6 frames) y da
-tres pasos cada 12 segundos — andar sin parar en la esquina del ojo distrae más
-que decora. Sin `refreshInterval` la mascota sigue funcionando, pero solo cambia
-de frame cuando algo la re-dibuja.
+**El techo de la animación son 1 fps.** La statusline se re-ejecuta por eventos
+(con *debounce* de 300 ms) y en reposo solo si defines `refreshInterval`, cuyo
+mínimo es `1` segundo. De ahí que ande a ratos en vez de sin parar: a un fotograma
+por segundo, un baile continuo en la esquina del ojo distrae más que decora. Sin
+`refreshInterval` la mascota sigue funcionando, pero solo cambia de frame cuando
+algo la re-dibuja.
 
 **Ajustes por entorno:**
 

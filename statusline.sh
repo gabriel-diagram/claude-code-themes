@@ -162,32 +162,48 @@ _forzado=bool(_mc)        # si lo fuerzas por env, manda el env y no el estado
 def _bgesc(e): return e.replace("[38;","[48;")   # el mismo color, pero de fondo
 
 def mascot(v, col):
-    # 14x6 pixeles en 3 filas de texto. El cuerpo va del COLOR DEL ESTADO, el mismo que
-    # la etiqueta y la barra, salvo k.o. (gris) o si lo fuerzas por env. Los ojos son
-    # texto negro sobre el cuerpo pintado a FONDO: asi salen recortados, como el logo.
+    # 14x6 pixeles en 3 filas de texto. Cuerpo pintado a color de FONDO y los ojos
+    # tallados en negro encima, a medios bloques: cada ojo ocupa 2x2 celdas, asi que
+    # el chevron del logo sale de verdad (un ">" de una celda se leia como texto).
+    #   \u2580\u2584   arriba          El cuerpo va del color del ESTADO, salvo k.o. (gris)
+    #   \u2584\u2580   abajo           o si lo fuerzas con STATUSLINE_MASCOT_COLOR.
     t=int(time.time())
     cue=_c(GRIS) if v<=0 else (_c(ACC) if _forzado else col)
-    BGC=_bgesc(cue); OJO="\033[38;5;16m"
-    if   v<=0:  o1,o2="\u2716","\u2716"     # k.o.
-    elif v>=80: o1,o2=">","<"         # los ojos del logo
-    elif v>=60: o1,o2="\u2022","\u2022"     # redondos
-    elif v>=40: o1,o2="-","-"         # entrecerrados
-    elif v>=20: o1,o2="~","~"         # fundido
-    else:       o1,o2="\u00d7","\u00d7"     # agonizando
-    if v>=60 and t%6==0: o1,o2="-","-"        # parpadeo: 1 de cada 6 frames
-    tro=BGC+OJO+"    "+o1+"    "+o2+"    "+R  # tronco: orejas fuera y ojos recortados
-    if v<=0:                                   # TUMBADO: se le cae la cabeza y las patas
-        return [" "*14, tro, cue+"\u2580"*14+R]
-    # HUNDIDO por debajo de 40: la cabeza pierde media altura, se le ve encogido
-    cab="  "+("\u2588" if v>=40 else "\u2584")*10+"  "
-    if v>=60:                                  # solo anda mientras le queda cuerda
-        anda=(t%12<3) or os.environ.get("STATUSLINE_MASCOT_WALK","")=="1"
-        if   not anda: pat="  \u2588\u2588\u2580\u2580\u2588\u2588\u2580\u2580\u2588\u2588  "
-        elif t%2:      pat="  \u2580\u2580\u2580\u2580\u2588\u2588\u2580\u2580\u2588\u2588  "
-        else:          pat="  \u2588\u2588\u2580\u2580\u2588\u2588\u2580\u2580\u2580\u2580  "
-    else:                                      # QUIETO: cansado ya no anda
-        pat="  \u2588\u2588\u2580\u2580\u2588\u2588\u2580\u2580\u2588\u2588  "
-    return [cue+cab+R, tro, cue+pat+R]
+    BG=_bgesc(cue); N="\033[38;5;16m"
+    CHEV =("\u2580\u2584","\u2584\u2580","\u2584\u2580","\u2580\u2584")  # > <  los del logo
+    REDO =("\u2584\u2584","\u2580\u2580","\u2584\u2584","\u2580\u2580")  # o o  redondos
+    REND =("  ","\u2580\u2580","  ","\u2580\u2580")                  # - -  entrecerrados
+    CAID =("  ","\u2584\u2584","  ","\u2584\u2584")                  # ~ ~  parpados caidos
+    EQUIS=("\u259a\u259e","\u259e\u259a","\u259a\u259e","\u259e\u259a")  # x x  aspa entera
+    if   v<=0:  oj=EQUIS
+    elif v>=80: oj=CHEV
+    elif v>=60: oj=REDO
+    elif v>=40: oj=REND
+    elif v>=20: oj=CAID
+    else:       oj=EQUIS
+    if   v>=40 and t%7==0: oj=REND      # parpadeo normal
+    elif 0<v<40 and t%4==0: oj=CAID     # ya solo pestanea a duras penas
+    a1,a2,b1,b2=oj
+    ancho=BG+N+" "+a1+"    "+b1+" "+R           # 10 celdas: mitad de ARRIBA de los ojos
+    bajo =BG+N+" "+a2+"    "+b2+" "+R           # 10 celdas: mitad de ABAJO
+    tronco=BG+N+"   "+a2+"    "+b2+"   "+R      # 14: orejas fuera, mitad de abajo
+    troncoalto=BG+N+"   "+a1+"    "+b1+"   "+R  # 14: idem con la mitad de arriba
+
+    if v<=0:
+        # K.O.: patas al aire y el cuerpo tumbado debajo. Da un espasmo cada 9 s.
+        pa="\u2584\u2584"; es=(t%9==0)
+        patas="  "+pa+"  "+("\u2588\u2588" if es else pa)+"  "+pa+"  "
+        return [cue+patas+R, troncoalto, "  "+bajo+"  "]
+
+    cab=("  "+ancho+"  ") if v>=40 else ("   "+BG+N+a1+"    "+b1+R+"   ")  # hundido
+    BAJ="\u2588\u2588"; SUB="\u2580\u2580"; HUE="\u2580\u2580"
+    if v>=60:                                    # solo anda mientras le queda cuerda
+        anda=(t%12<4) or os.environ.get("STATUSLINE_MASCOT_WALK","")=="1"
+        ciclo=[(BAJ,BAJ,BAJ),(SUB,BAJ,BAJ),(BAJ,SUB,BAJ),(BAJ,BAJ,SUB)]
+        p1,p2,p3=ciclo[t%4 if anda else 0]       # la onda recorre las tres patas
+    else:
+        p1,p2,p3=BAJ,BAJ,BAJ                     # cansado: quieto
+    return [cue+cab+R, tronco, cue+"  "+p1+HUE+p2+HUE+p3+"  "+R]
 
 def padr(s,w):
     n=w-vis(s)
