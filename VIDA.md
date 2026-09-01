@@ -1,99 +1,85 @@
-# La vida del bicho
+# El uso del bicho
 
-Qué mide exactamente la barra de vida de la statusline, y qué hace que el bicho
-pase de *fresca* a *k.o.*
+Qué mide exactamente el bicho de la statusline, y qué hace que pase de *fresca* a
+*k.o.*
 
-## Los tres cuellos
+## Un solo número
 
-La vida sale de **un solo número**: el peor de tres cuellos de botella, todos en
-tanto por ciento de consumo.
+Todo —estado, ojos, patas, cabeza, color— sale de **un número entre 0 y 100**: el
+uso. Y el uso es una **media ponderada** de tres consumos.
 
-| Cuello | Campo del JSON de la statusline | Qué es |
+| Peso | Cuello | Campo del JSON de la statusline |
 | --- | --- | --- |
-| `ctx` | `context_window.used_percentage` | cuánto llevas gastado de la ventana de contexto |
-| `5h` | `rate_limits.five_hour.used_percentage` | cuánto llevas del límite de 5 horas |
-| `7d` | `rate_limits.seven_day.used_percentage` | cuánto llevas del límite de 7 días |
-
-Se coge el **máximo** de los tres. No una media: manda el que más aprieta, porque
-es el que te va a parar.
-
-## La fórmula
+| **0.5** | contexto | `context_window.used_percentage` |
+| **0.3** | límite de 5 horas | `rate_limits.five_hour.used_percentage` |
+| **0.2** | límite de 7 días | `rate_limits.seven_day.used_percentage` |
 
 ```
-vida = 100 · (1 − (peor / 100)²)          acotada a 0–100
+uso = 0.5 · ctx  +  0.3 · 5h  +  0.2 · 7d
 ```
 
-Curva cuadrática, no una resta.
+Ejemplo real: contexto al 36%, cinco horas al 41%, siete días al 13%.
 
-## Por qué la curva y no `100 − peor`
+```
+0.5·36 + 0.3·41 + 0.2·13  =  18 + 12,3 + 2,6  =  32,9  →  33%  →  vibrante
+```
 
-Porque haber gastado el 44% de tu cuota **no es media vida**: te queda margen de
-sobra y el bicho no debería estar ya medio muerto. La cuadrática lo mantiene
-arriba mientras hay holgura y lo desploma solo cuando el cuello se acerca al tope.
+## Por qué ponderada y no el peor de los tres
 
-| Peor cuello | Vida |
-| --- | --- |
-| 0% | 100 |
-| 10% | 99 |
-| 20% | 96 |
-| 30% | 91 |
-| 40% | 84 |
-| 50% | 75 |
-| 60% | 64 |
-| 70% | 51 |
-| 80% | 36 |
-| 90% | 19 |
-| 95% | 10 |
-| 99% | 2 |
-| 100% | 0 |
+Porque **el contexto es lo único que puedes gestionar en el momento**. Si se te
+llena, compactas, cierras la sesión o abres otra. Los límites de 5 horas y 7 días
+solo avisan: no hay nada que hacer con ellos salvo esperar.
 
-Fíjate en el tramo de arriba: del 0 al 40% de consumo la vida solo baja 16
-puntos. Del 80 al 100%, baja 36. El aviso llega cuando importa.
+Coger el máximo de los tres castigaría igual una cosa accionable que una que no
+lo es. Que el límite de 7 días vaya por el 80% no debería poner al bicho al borde
+de la muerte si acabas de abrir la sesión con el contexto vacío.
+
+Por eso el reparto 50 / 30 / 20: manda lo que puedes tocar, y lo demás pondera.
 
 ## Dónde cae cada estado
 
-| Peor cuello | Vida | Estado |
-| --- | --- | --- |
-| hasta 22,4% | ≥95 | fresca |
-| hasta 44,7% | ≥80 | vibrante |
-| hasta 63,2% | ≥60 | a gusto |
-| hasta 77,5% | ≥40 | espesa |
-| hasta 89,4% | ≥20 | cansada |
-| más de 89,4% | <20 | ahogada |
-| **exactamente 100%** | 0 | k.o. |
+| Uso | Estado | Ojos | Cabeza | Patas |
+| --- | --- | --- | --- | --- |
+| ≤22% | fresca ✦ | `>` `<` | sí | anda |
+| ≤45% | vibrante | `>` `<` | sí | anda |
+| ≤63% | a gusto | `●` `●` | sí | anda |
+| ≤78% | espesa | `▬` `▬` | sí | quieto |
+| ≤89% | cansada | `◠` `◠` | hundida | quieto |
+| <100% | ahogada | `✕` `✕` | hundida | quieto |
+| **100% exacto** | k.o. | `✕` `✕` | hundida | tumbado, patas al aire |
 
-**El k.o. es literal.** Hace falta que un límite llegue al 100% de verdad. Al 99%
-todavía le quedan 2 puntos de vida y el bicho sigue de pie (hundido, pero de pie).
+Son **cuatro señales independientes** que se van cayendo en orden: primero los
+ojos, luego el paso de las patas, luego la cabeza se hunde y al final la silueta
+se tumba. A un vistazo se distingue *cansada* de *ahogada* sin leer la etiqueta.
+
+**El k.o. es literal.** Al ser una media, hace falta el 100% clavado: con el
+contexto al 100% pero los límites a cero, el uso sale 50 y el bicho está *a
+gusto*. El k.o. de verdad es que se te haya acabado todo a la vez.
+
+## Cuando falta algún dato
+
+`rate_limits` solo llega a las cuentas Pro y Max, y solo después de la primera
+respuesta de la API en la sesión; Claude Code además retira cada ventana en
+cuanto pasa su `resets_at`.
+
+Si falta alguno de los tres, **su peso se reparte entre los que sí llegan**
+(se normaliza sobre los pesos presentes). Con solo el contexto, `uso = ctx`. Si
+no llega ninguno, el uso es 0 y el bicho sale fresco — no se inventa un estado.
 
 ## Qué NO mide
 
 Ni el **coste en dólares**, ni el **tiempo de sesión**, ni las **líneas tocadas**,
-ni el estado de git. Todo eso sale en la statusline, pero no le afecta al bicho.
-La vida es solo consumo de cuota y de contexto: lo que puede pararte.
-
-## Qué te dice cuando aprieta
-
-- **Vida < 40** — aparece a la izquierda de la fila 4 qué cuello es el que aprieta:
-  `cuello: ctx`.
-- **Vida = 0** — aparece qué te mató: `✖ ctx al 100%`.
-
-Así no tienes que adivinar cuál de los tres porcentajes es el problema.
-
-## Cuando no hay datos
-
-`rate_limits` solo llega a las cuentas Pro y Max, y solo después de la primera
-respuesta de la API en la sesión. Claude Code además retira cada ventana en cuanto
-pasa su `resets_at`. Si no llega ninguno de los tres campos, la vida se queda en
-**100** y el bicho sale fresco — no se inventa un estado.
+ni el estado de git, ni la caché. Todo eso sale en las bandas de la izquierda,
+pero no le afecta al bicho. El uso es solo consumo de cuota y de contexto: lo que
+puede pararte.
 
 ## Honestidad
 
 El bicho **no finge emociones**. No se pone contento porque el código compile ni
 triste porque falle un test: refleja un número real y comprobable. Si está
-cansado, es que un límite va por el 85%. Si hace k.o., es que algo llegó al 100%
-y te dice cuál.
+cansado, es que la media va por el 85%.
 
 ---
 
-Ver también el [README](README.md) para el resto de la statusline y las caras del
-sprite.
+Ver también el [README](README.md) para las bandas, la paleta y el resto de la
+statusline.
