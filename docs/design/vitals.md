@@ -1,11 +1,11 @@
 # El uso del bicho
 
-Qué mide exactamente el bicho de la statusline, y qué hace que pase de *fresca* a
+Qué mide exactamente el bicho de la statusline, y qué hace que pase de *fresh* a
 *k.o.*
 
 Esta es **una de las dos capas**. La vida es del momento: sube y baja con el uso
 y se recupera al compactar. La otra capa, el progreso —la XP que elige en qué
-evoluciona—, está en [EVOLUCIONES.md](EVOLUCIONES.md) y no baja nunca.
+evoluciona—, está en [evolution.md](evolution.md) y no baja nunca.
 
 ## Un solo número
 
@@ -25,7 +25,7 @@ uso = 0.5 · ctx  +  0.3 · 5h  +  0.2 · 7d
 Ejemplo real: contexto al 36%, cinco horas al 41%, siete días al 13%.
 
 ```
-0.5·36 + 0.3·41 + 0.2·13  =  18 + 12,3 + 2,6  =  32,9  →  33%  →  vibrante
+0.5·36 + 0.3·41 + 0.2·13  =  18 + 12,3 + 2,6  =  32,9  →  33%  →  lively
 ```
 
 ## Por qué ponderada y no el peor de los tres
@@ -44,12 +44,12 @@ Por eso el reparto 50 / 30 / 20: manda lo que puedes tocar, y lo demás pondera.
 
 | Uso | Estado | Ojos | Cabeza | Patas |
 | --- | --- | --- | --- | --- |
-| ≤22% | fresca ✦ | `>` `<` | sí | anda |
-| ≤45% | vibrante | `>` `<` | sí | anda |
-| ≤63% | a gusto | `o` `o` | sí | anda |
-| ≤78% | espesa | `▬` `▬` | sí | quieto |
-| ≤89% | cansada | `_` `_` | hundida | quieto |
-| <100% | ahogada | `x` `x` | hundida | quieto |
+| ≤22% | fresh ✦ | `>` `<` | sí | anda |
+| ≤45% | lively | `>` `<` | sí | anda |
+| ≤63% | easy | `o` `o` | sí | anda |
+| ≤78% | sluggish | `▬` `▬` | sí | quieto |
+| ≤89% | tired | `_` `_` | hundida | quieto |
+| <100% | drowning | `x` `x` | hundida | quieto |
 | **contexto al 100%** | k.o. | `x` `x` | hundida | tumbado, patas al aire |
 
 Con **hambre ≥7** los ojos no cambian de forma: se apagan de color. El hambre es
@@ -57,11 +57,11 @@ de la otra capa y no toca el estado.
 
 Son **cuatro señales independientes** que se van cayendo en orden: primero los
 ojos, luego el paso de las patas, luego la cabeza se hunde y al final la silueta
-se tumba. A un vistazo se distingue *cansada* de *ahogada* sin leer la etiqueta.
+se tumba. A un vistazo se distingue *tired* de *drowning* sin leer la etiqueta.
 
 **El k.o. tiene su propia puerta.** Al ser una media, exigir el 100% de la media
 significaba exigir los tres consumos al 100% *a la vez*: con ctx, 5h y 7d al 100,
-90 y 90 la media sale 95, o sea *ahogada*. Ese sprite no se veía nunca.
+90 y 90 la media sale 95, o sea *drowning*. Ese sprite no se veía nunca.
 
 Así que el k.o. salta en cuanto **el contexto llega al 100%**, sin mirar la media.
 Es coherente con por qué la media pondera como pondera: el contexto es lo único
@@ -85,8 +85,8 @@ pero no le afecta al bicho. El uso es solo consumo de cuota y de contexto: lo qu
 puede pararte.
 
 Tampoco mide el **progreso**. Que el bicho esté *k.o.* no lo devuelve a larva:
-la silueta la elige la XP, y la XP no la toca el uso. Un `cirujano` reventado
-sigue siendo un cirujano, con cara de haber visto cosas.
+la silueta la elige la XP, y la XP no la toca el uso. Un `surgeon` reventado
+sigue siendo un surgeon, con cara de haber visto cosas.
 
 ## Honestidad
 
@@ -96,6 +96,6 @@ cansado, es que la media va por el 85%.
 
 ---
 
-Ver también el [README](README.md) para las bandas, la paleta y el resto de la
-statusline, y [EVOLUCIONES.md](EVOLUCIONES.md) para la otra capa: XP, hambre,
+Ver también el [README](../../README.md) para las bandas, la paleta y el resto de la
+statusline, y [evolution.md](evolution.md) para la otra capa: XP, hambre,
 comida y las 27 evoluciones.

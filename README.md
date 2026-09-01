@@ -19,28 +19,61 @@ de sesión).*
 
 ## Contenido
 
+- `.claude-plugin/` — el manifiesto y el marketplace: esto es un plugin instalable
+- `commands/` — `/pet`, `/feed` y `/pet-statusline`
+- `hooks/hooks.json` — los hooks del plugin, con `${CLAUDE_PLUGIN_ROOT}`
 - `themes/terminal.json` — tema por tipo de dato, el que empareja con la statusline
 - `themes/blood-red.json` — tema cálido instalable vía `/theme`
 - `themes/electric-blue.json` — tema frío instalable vía `/theme`
-- `statusline.sh` — statusline de tres bandas con el bicho
-- `bicho.py` — las 27 plantillas, los siete estados y el árbol de evoluciones
-- `pet` — el panel del bicho (`/pet`) y su comida (`/feed`)
-- `hooks/pet-hook.sh` — traduce commits, tests y compactados en comida
-- `install.sh` — instala todo lo anterior; con `--hooks`, también los hooks
-- [`VIDA.md`](VIDA.md) — la capa del momento: qué hace que pase de fresca a k.o.
-- [`EVOLUCIONES.md`](EVOLUCIONES.md) — la capa permanente: XP, comida y las 27 formas
-- [`AUDITORIA.md`](AUDITORIA.md) — rendimiento y errores, medido
+- `bin/ccpet-<os>-<arch>` — el binario, uno por plataforma; `bin/ccpet` elige
+- `cmd/ccpet/` — el punto de entrada: `statusline`, `hook`, el panel, `setup`, `link`
+- `internal/` — el paquete: paleta, sprites, estados, árbol, fichero de vida, bandas
+- `scripts/build.sh` — compila las cinco plataformas
+- `scripts/install.sh` — instalación sin plugin; con `--hooks`, también los hooks
+- [`vitals.md`](docs/design/vitals.md) — la capa del momento: qué hace que pase de fresh a k.o.
+- [`evolution.md`](docs/design/evolution.md) — la capa permanente: XP, comida y las 27 formas
+- [`audit-log.md`](docs/audit-log.md) — rendimiento y errores, medido
 
 ## Instalación
 
-```bash
-./install.sh            # temas + statusline + bicho + /pet y /feed
-./install.sh --hooks    # además engancha los hooks que le dan de comer
-./install.sh --uninstall
+Es un **plugin**. Tres líneas y ya:
+
+```
+/plugin marketplace add gabriel-diagram/claude-code-themes
+/plugin install claude-code-themes
+/pet-statusline
 ```
 
-Hace copia de seguridad de `~/.claude/settings.json` antes de tocarlo, es
-idempotente, y **no cambia el tema activo**: eso se elige con `/theme` → Terminal.
+Lo primero trae los temas, los comandos `/pet` y `/feed`, y los hooks que le dan
+de comer al bicho. Lo tercero enciende la statusline. Después, `/theme` → Terminal.
+
+**Por qué la statusline necesita ese tercer paso.** `statusLine` no es un
+componente de plugin: comprobado contra el binario de Claude Code, la lista es
+`commands`, `agents`, `skills`, `hooks`, `outputStyles`, `themes`, `mcpServers`
+y `lspServers`. La clave tiene que escribirse en `~/.claude/settings.json`, y eso
+es lo que hace `/pet-statusline` — con copia de seguridad previa y escritura
+atómica. `/pet-statusline off` la quita.
+
+**Y por qué no apunta al plugin directamente.** Un plugin se instala en
+`~/.claude/plugins/cache/<marketplace>/<plugin>/<versión>/`, con **la versión en
+la ruta**. Los hooks y los MCP no lo sufren porque el CLI vuelve a resolver
+`${CLAUDE_PLUGIN_ROOT}` cada vez que los carga, pero `statusLine.command` es una
+cadena que no resuelve nadie: apuntada al plugin, se rompería en el primer
+update. Así que apunta a `~/.claude/ccpet`, que es un enlace que un hook de
+`SessionStart` mantiene al día. Cuesta un `readlink` por sesión.
+
+### Sin plugin
+
+```bash
+scripts/install.sh            # temas + statusline + bicho + /pet y /feed
+scripts/install.sh --hooks    # además engancha los hooks que le dan de comer
+scripts/install.sh --uninstall
+```
+
+Copia el runtime a `~/.claude/ccpet` como directorio de verdad, y el hook del
+plugin lo detecta y se aparta: dos instaladores peleándose por una ruta es peor
+que uno de los dos cediendo. Hace copia de seguridad de `settings.json` antes de
+tocarlo, es idempotente, y **no cambia el tema activo**.
 
 Los **hooks van aparte a propósito**. Viven en `~/.claude/settings.json`, que es
 global, así que corren en todos tus repos. Sin ellos el bicho existe y se ve,
@@ -49,11 +82,11 @@ pero no come solo: se le da con `/feed`.
 ### A mano, si prefieres
 
 ```bash
-mkdir -p ~/.claude/themes
+mkdir -p ~/.claude/themes ~/.claude/ccpet
 cp themes/*.json ~/.claude/themes/
-cp bicho.py ~/.claude/                      # las plantillas y el árbol
-install -m 755 statusline.sh ~/.claude/     # necesita bicho.py al lado
-install -m 755 pet ~/.claude/
+cp -R bin scripts ~/.claude/ccpet/
+chmod +x ~/.claude/ccpet/bin/* ~/.claude/ccpet/scripts/*.sh
+~/.claude/ccpet/bin/ccpet link       # crea los dos enlaces estables
 ```
 
 Y en `~/.claude/settings.json`:
@@ -63,19 +96,58 @@ Y en `~/.claude/settings.json`:
   "theme": "custom:terminal",
   "statusLine": {
     "type": "command",
-    "command": "~/.claude/statusline.sh",
+    "command": "~/.claude/ccpet-statusline",
     "hideVimModeIndicator": true,
     "refreshInterval": 1
   }
 }
 ```
 
-> El slug (`custom:<slug>`) sale del **nombre del archivo** sin `.json`, no del
-> campo `"name"`. `blood-red.json` → `custom:blood-red`.
+> `~/.claude/ccpet-statusline` es un enlace al binario de tu máquina, y el
+> binario mira su propio `argv[0]` para saber qué hacer. Así la clave es una
+> ruta pelada sin argumentos —la única forma que funciona tanto si el host la
+> lanza con shell como si la ejecuta directamente— y no hay shell de por medio
+> en algo que corre una vez por segundo.
 
-La statusline solo necesita `python3` (librería estándar; nada de `jq`). `git` es
-opcional: si no está, degrada con elegancia. Si falta `bicho.py`, la statusline
-sigue funcionando — sin bicho.
+> El slug (`custom:<slug>`) sale del **nombre del archivo** sin `.json`, no del
+> campo `"name"`. `blood-red.json` → `custom:blood-red`. Instalado como plugin el
+> tema lo carga el propio plugin y el slug lleva su prefijo.
+
+**No necesita nada.** Es un binario estático de Go (`CGO_ENABLED=0`): ni
+`python3`, ni `node`, ni `jq`. `git` es opcional; si no está, degrada con
+elegancia.
+
+### Por qué Go
+
+Estaba en Python y funcionaba. El problema no era el código —medido, hacía su
+trabajo en 1,5 ms— sino lo que cuesta que Python se presente: 5,4 ms de
+intérprete más 12,9 de imports, de los cuales 10 eran `subprocess` y `re` con
+todo lo que arrastran. Ese peaje se pagaba **una vez por segundo** en la
+statusline y **en cada llamada a herramienta** en el hook.
+
+| | Python | Go |
+| --- | --- | --- |
+| statusline (1 vez/segundo) | 22,4 ms | **3,5 ms** |
+| hook, camino lento (`Bash`, `Edit`, `TodoWrite`) | 21,3 ms | **1,6 ms** |
+| hook, camino rápido (todo lo demás) | 2,6 ms | **1,6 ms** |
+| panel `/pet` | 14,7 ms | **2,1 ms** |
+
+El hook es el que importa: colgaba 21 ms de cada `Bash` y cada `Edit`.
+
+También desaparecieron dos cosas que solo existían para abaratar Python: el
+prefiltro de bash del hook (arrancar el intérprete costaba 15 ms, así que había
+que evitarlo) y la purga manual de `sys.path` (un `python3 -c` mete el
+directorio actual en la ruta de imports, y un `json.py` cualquiera del repo que
+tuvieras abierto secuestraba la statusline — comprobado, pasaba de verdad).
+
+Queda un `bin/ccpet` de veinte líneas de bash que elige binario por plataforma,
+porque `hooks.json` necesita una ruta fija. Usa `$OSTYPE` y `$MACHTYPE`, que
+bash rellena solo: `uname` serían dos forks en algo que corre en cada llamada.
+Y ni siquiera está en el camino caliente: `ccpet link` deja dos enlaces
+estables —`~/.claude/ccpet-run` y `~/.claude/ccpet-statusline`— al binario de
+tu máquina, y tanto el hook como la statusline van directos. El shim es el
+plan B, y de paso repara los enlaces cuando un update del plugin los deja
+colgando.
 
 ## La statusline en detalle
 
@@ -87,8 +159,8 @@ antes que hacer *wrap* (que descuadra la caja del prompt):
 
 ```
 ──────────────────────────────────────────────────────────────────────────────
- Opus 5  ██████░░░░░░░░░░ 36% · 1M ctx │ xhigh │ 42.7 tok/s │ bypass   vibrante
-rochas/rochas-energy-backend (fix-errors ✳) │ +184/−37 │ $28.29        |   |
+ Opus 5  ██████░░░░░░░░░░ 36% · 1M ctx │ xhigh │ 42.7 tok/s │ bypass     lively
+rochas-energy-backend (fix-errors ✳) │ +184/−37 │ $28.29                |   |
 api │ 5h ████░░░░░░ 41%  7d █░░░░░░░░░ 13% │ 1h 12m                   ▗█┼█┼█▖
                                                                      ▐█ > < █▌
                                                                       ▝█┼█┼█▘
@@ -98,9 +170,9 @@ api │ 5h ████░░░░░░ 41%  7d █░░░░░░░░░
 - **Banda 1 · motor** — modelo, contexto, razonamiento y ritmo: lo que cambia
   cada turno.
 - **Banda 2 · trabajo** — repo, rama, diff y coste: lo que se lleva a un commit.
-  El nombre del repo lo da `workspace.repo` del payload (`owner/nombre`) cuando
-  hay remoto; sin remoto se queda el nombre a secas, porque la carpeta de al lado
-  no es un owner.
+  El nombre del repo lo da `workspace.repo.name` del payload cuando hay remoto,
+  y si no, la carpeta raíz del repo. Solo el nombre: el owner es siempre el mismo
+  y no te dice dónde estás.
 #### Ritmo y permisos
 
 El **`tok/s`** es real, no una estimación, pero hay que mirar bien de dónde sale.
@@ -136,7 +208,7 @@ Nueve columnas por cinco filas. La silueta la elige la **evolución**; los ojos,
 las patas y el color los elige el **estado**.
 
 ```
-  |   |     <- marca de la ramificación (se cae al llegar a cansada)
+  |   |     <- marca de la ramificación (se cae al llegar a tired)
  ▗█┼█┼█▖    <- cuerpo de la evolución
 ▐█ > < █▌   <- cara, con las orejas fuera
  ▝█┼█┼█▘
@@ -145,30 +217,30 @@ las patas y el color los elige el **estado**.
 
 Siete estados, y **cuatro señales independientes** que cambian en este orden: los
 ojos, luego el paso de las patas, luego la cabeza se hunde y al final la silueta
-se tumba. A un vistazo se distingue *cansada* de *ahogada* sin leer la etiqueta.
+se tumba. A un vistazo se distingue *tired* de *drowning* sin leer la etiqueta.
 
 | Uso | Etiqueta | Ojos | Cabeza | Patas |
 | --- | --- | --- | --- | --- |
-| ≤22% | fresca ✦ | `>` `<` | sí | anda |
-| ≤45% | vibrante | `>` `<` | sí | anda |
-| ≤63% | a gusto | `o` `o` | sí | anda |
-| ≤78% | espesa | `▬` `▬` | sí | quieto |
-| ≤89% | cansada | `_` `_` | **hundida** | quieto |
-| <100% | ahogada | `x` `x` | hundida | quieto |
+| ≤22% | fresh ✦ | `>` `<` | sí | anda |
+| ≤45% | lively | `>` `<` | sí | anda |
+| ≤63% | easy | `o` `o` | sí | anda |
+| ≤78% | sluggish | `▬` `▬` | sí | quieto |
+| ≤89% | tired | `_` `_` | **hundida** | quieto |
+| <100% | drowning | `x` `x` | hundida | quieto |
 | 100% | k.o. | `x` `x` | hundida | **tumbado**, patas al aire |
 
 Los ojos de las dos primeras filas son **los de la evolución**, que tiene los
-suyos; de *a gusto* para abajo manda el estado. Así el cansancio se lee igual sea
+suyos; de *easy* para abajo manda el estado. Así el cansancio se lee igual sea
 cual sea el bicho.
 
 **Movimiento.** Las patas alternan `▘ ▝` ↔ `▝ ▘` en cada refresco de la
-statusline: anda mientras trabajas y se queda quieto a partir de *espesa*. El
+statusline: anda mientras trabajas y se queda quieto a partir de *sluggish*. El
 parpadeo (`_ _`) es un solo frame cada siete refrescos. Al cruzar un umbral la
 etiqueta sale en negrita un refresco — para eso guarda el estado anterior en
 `$TMPDIR/claude-statusline-<session_id>`.
 
 A 1 fps, unas patas alternando sin parar en la esquina del ojo cansan, así que
-**por defecto anda cuatro segundos de cada doce**. `STATUSLINE_BICHO_ANDA=1`
+**por defecto anda cuatro segundos de cada doce**. `STATUSLINE_PET_WALK=1`
 devuelve el baile continuo del diseño.
 
 ### Evoluciones
@@ -178,7 +250,7 @@ llevan por la rama metódica, los tests y los planes por la inquisitiva, y
 reventar el contexto por la impulsiva.
 
 ```
-chispa -> pauta / sonda / brasa -> siete oficios -> catorce marcas
+spark -> pattern / probe / ember -> siete oficios -> catorce marcas
 ```
 
 ```bash
@@ -187,7 +259,7 @@ chispa -> pauta / sonda / brasa -> siete oficios -> catorce marcas
 ```
 
 El árbol entero, la tabla de comida y qué alimenta cada contador están en
-[EVOLUCIONES.md](EVOLUCIONES.md). Sin `./install.sh --hooks` el bicho existe y
+[evolution.md](docs/design/evolution.md). Sin `scripts/install.sh --hooks` el bicho existe y
 se ve, pero solo come con `/feed`.
 
 ### El uso: media ponderada
@@ -211,10 +283,10 @@ hace falta el 100% clavado.
 
 | Variable | Efecto |
 | --- | --- |
-| `STATUSLINE_BICHO=0` | apaga el bicho, deja las tres bandas |
-| `STATUSLINE_BICHO_ANDA=1` | anda en cada refresco en vez de a ratos |
-| `STATUSLINE_FONDO=0` | quita el fondo del pie, deja las líneas transparentes |
-| `STATUSLINE_REGLA=0` | quita la raya de arriba y ahorra una fila |
+| `STATUSLINE_PET=0` | apaga el bicho, deja las tres bandas |
+| `STATUSLINE_PET_WALK=1` | anda en cada refresco en vez de a ratos |
+| `STATUSLINE_BACKGROUND=0` | quita el fondo del pie, deja las líneas transparentes |
+| `STATUSLINE_RULE=0` | quita la raya de arriba y ahorra una fila |
 | `STATUSLINE_RIGHT_PAD` | margen derecho, por defecto `6` (ver abajo) |
 | `PET_TEST_RUNNERS` | regex extra para reconocer tu runner de tests |
 
@@ -304,7 +376,17 @@ en `#0A0D0F`.
 | Fondo de tus mensajes | `userMessageBackground` | `#0f1e38` |
 | Error / Éxito / Aviso | `error`/`success`/`warning` | `#ff4b3e` / `#8fae7a` / `#e0a35c` |
 
-Los tokens no listados en `overrides` heredan del preset `dark` de Claude Code.
+**Terminal cubre los 72 tokens** que reconoce Claude Code, no solo la docena que
+se ve de un vistazo. Los 44 que faltaban —- el spinner, las pastillas de *skill* y
+*fast mode*, los fondos de los bloques de bash y de memoria, los diffs apagados,
+los ocho colores de subagente y el arcoíris—- heredaban del preset `dark`, es
+decir de la paleta de Anthropic: naranja `#d77757`, azules `#4782c8` y `#93a5ff`,
+amarillo `#fbbc04`. Se colaban por los bordes y rompían el tema. Ahora salen de
+los ocho colores de rol de la paleta, cada uno por su papel: `skill` es un ajuste
+del CLI y va en morado, `ide` es una conexión y va en azul de enlace, el fondo del
+bloque de bash tira al morado de su borde, el de memoria al azul del suyo.
+
+Blood Red y Electric Blue siguen con 28 y heredan los otros 44.
 
 ## Limitación conocida
 
@@ -312,6 +394,23 @@ El **banner de bienvenida** de arranque ("Claude Code vX.Y.Z", "Tips for getting
 started", "What's new") usa acentos de onboarding que **no** forman parte del
 sistema de temas — se quedan en el rosa/coral de marca sin importar el tema
 activo. No es un fallo del tema.
+
+## Migración desde la versión anterior
+
+El proyecto pasó de Python a Go, y el código, las claves de
+`~/.claude/pet.json` y los nombres de las 27 formas pasaron a inglés. **No hay
+que hacer nada**: `scripts/install.sh` borra los ficheros
+sueltos que la versión vieja dejaba en `~/.claude/`, y el `pet.json` se traduce
+solo la primera vez que se escribe — xp, racha, contadores y forma secreta
+incluidos. `spark` es ahora `spark`, `bughunter` es `bughunter`, `hambre` es
+`hunger`. El bicho conserva xp, racha, contadores y forma secreta: los tres
+lanzadores viejos que la versión de Python dejaba sueltos en `~/.claude/`
+(`statusline.sh`, `bicho.py`, `pet`, `pet-hook.sh`) los borra el instalador.
+
+Lo único que hay que cambiar a mano son las variables de entorno, si las tenías
+puestas: `STATUSLINE_PET` → `STATUSLINE_PET`, `STATUSLINE_PET_WALK` →
+`STATUSLINE_PET_WALK`, `STATUSLINE_BACKGROUND` → `STATUSLINE_BACKGROUND`,
+`STATUSLINE_RULE` → `STATUSLINE_RULE`.
 
 ## Licencia
 

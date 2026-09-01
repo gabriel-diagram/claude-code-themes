@@ -1,0 +1,11 @@
+{
+  "name": "claude-code-themes",
+  "version": "2.0.0",
+  "description": "Three colour themes for Claude Code, plus a three-band statusline with a pet on the right that reflects the real state of the session and evolves with how you work.",
+  "author": {
+    "name": "Gabriel Urs",
+    "url": "https://github.com/gabriel-diagram"
+  },
+  "homepage": "https://github.com/gabriel-diagram/claude-code-themes",
+  "keywords": ["theme", "statusline", "pet", "terminal", "productivity"]
+}

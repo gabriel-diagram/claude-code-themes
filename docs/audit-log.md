@@ -1,3 +1,12 @@
+> **Documento histórico.** Esto audita la implementación en **Python**, que fue
+> la del proyecto hasta la versión 2.0.0. El runtime es ahora un binario de Go y
+> los números de aquí ya no describen lo que corre en tu máquina: la statusline
+> pasó de 22,4 ms a 3,5 y el hook de 21,3 a 1,6. Se conserva porque las
+> mediciones y el razonamiento siguen siendo ciertos sobre lo que medían, y
+> porque explican **por qué** se acabó cambiando de lenguaje: el código propio
+> costaba 1,5 ms y el resto era Python presentándose. Los nombres de fichero e
+> identificador son los de entonces (`bicho.py`, `statusline.sh`, `ESTADOS`).
+
 # Auditoría de la statusline
 
 Repaso de rendimiento y errores de `statusline.sh`, medido sobre el commit
@@ -173,7 +182,7 @@ una media ponderada eso significa los tres al 100% clavado:
 | 100 | 90 | 90 | 95,000 | ahogada |
 | 100 | — | — | 100,000 | k.o. |
 
-Es coherente con lo que documenta [VIDA.md](VIDA.md), y aun así merece decirlo
+Es coherente con lo que documenta [VIDA.md](design/vitals.md), y aun así merece decirlo
 claro: **el sprite del k.o., el que más trabajo llevó, no se va a ver casi
 nunca.** Solo aparece si el único dato disponible es el contexto. Si se quiere
 que sea alcanzable, el umbral tiene que bajar (p. ej. 97) o el k.o. debe
@@ -222,8 +231,8 @@ Comprobado y **no** es problema. Documentado para no repetir el trabajo.
 
 ---
 
-Ver también el [README](README.md) para las bandas y la paleta, y
-[VIDA.md](VIDA.md) para la fórmula del estado del bicho.
+Ver también el [README](../README.md) para las bandas y la paleta, y
+[VIDA.md](design/vitals.md) para la fórmula del estado del bicho.
 
 ---
 

@@ -1,4 +1,7 @@
 .DS_Store
 *.swp
-__pycache__/
-*.pyc
+
+# Go build output. The five release binaries under bin/ are committed on
+# purpose: the plugin is installed by cloning this repo, so whatever is not
+# here is not there.
+/ccpet

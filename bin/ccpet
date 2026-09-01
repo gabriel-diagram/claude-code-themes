@@ -1,0 +1,29 @@
+#!/bin/bash
+# Picks the binary for this machine and hands over to it.
+#
+# The plugin's hooks.json needs one fixed path, so something has to choose
+# between the five builds. This does it with $OSTYPE and $MACHTYPE, which bash
+# sets itself: `uname` would be two forks, and this runs on every tool call.
+#
+# `exec` means there is no second process - bash is replaced, not waited on.
+ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+
+case "$OSTYPE" in
+  linux*)              os=linux ;;
+  darwin*)             os=darwin ;;
+  msys*|cygwin*|win*)  os=windows ;;
+  *)                   os=linux ;;
+esac
+case "$MACHTYPE" in
+  aarch64*|arm64*)     arch=arm64 ;;
+  *)                   arch=amd64 ;;
+esac
+
+BIN="$ROOT/ccpet-$os-$arch"
+[ -x "$BIN" ] || BIN="$BIN.exe"
+if [ ! -x "$BIN" ]; then
+  echo "ccpet: no build for $os/$arch in $ROOT" >&2
+  echo "       run scripts/build.sh, or grab a release" >&2
+  exit 127
+fi
+exec "$BIN" "$@"
