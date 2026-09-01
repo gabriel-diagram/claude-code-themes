@@ -70,7 +70,6 @@ VACIO = (_hx("#1d2b38"), 235)   # hueco de las barras de límite
 CTXV  = (_hx("#24382c"), 235)   # hueco de la barra de contexto
 FONDO = (_hx("#0a0d0f"), 233)   # el pie: un tono por encima del negro
 BORDE = (_hx("#161c21"), 234)   # la raya fina que lo separa del hilo
-DIRT  = (_hx("#4a545f"), 240)   # el "~/" del directorio, mas apagado
 COLA  = (_hx("#3a444e"), 238)   # la cola del bocadillo
 TEXTO = (_hx("#c9d1d9"), 252)   # lo que dice el bicho
 
@@ -201,14 +200,9 @@ cwd = g(d, "workspace", "current_dir") or d.get("cwd") or os.getcwd()
 home = os.path.expanduser("~")
 ddir = "~" + cwd[len(home):] if cwd.startswith(home) else cwd
 partes = ddir.rstrip("/").split("/")
-# El "~/" se pinta mas apagado que el resto de la ruta. Si la ruta se recorta
-# desaparece con lo demas: fingirlo dejaria entender que "srv" cuelga de tu casa
-# cuando puede colgar de tres carpetas mas.
-dircola = "/".join(partes[-3:]) if len(partes) > 3 else ddir
-dirpre = ""
-if dircola.startswith("~/"):
-    dirpre, dircola = "~/", dircola[2:]
-dircorto = dirpre + dircola
+# Solo la carpeta en la que estas. La ruta entera se comia media banda para
+# repetir lo que ya dice el repo de la banda 2.
+dircorto = partes[-1] or ddir
 
 esfuerzo = g(d, "effort", "level")
 vim = g(d, "vim", "mode")
@@ -407,8 +401,11 @@ if coste is not None:
 # ---------------------------------------------------------------------------
 # BANDA 3 · CUOTA
 # ---------------------------------------------------------------------------
-_dirtxt = (c(DIRT) + dirpre + R if dirpre else "") + c(DIR) + dircola + R
-b3 = [seg(1, _dirtxt, color=c(DIR), plain=dircorto)]
+# Si la carpeta se llama igual que el repo es que estas en su raiz, y entonces
+# no aporta nada: ya lo dice la banda 2. Solo sale cuando estas dentro de algo.
+b3 = []
+if dircorto != _nom:
+    b3.append(seg(1, c(DIR) + dircorto + R, color=c(DIR), plain=dircorto))
 _primera = True
 for _v, _et in ((rl5, "5h"), (rl7, "7d")):
     if _v is None:

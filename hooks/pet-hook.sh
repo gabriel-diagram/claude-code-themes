@@ -265,7 +265,20 @@ def parece_runner(orden):
     return bool(re.search(r"test|spec", base))
 
 
-if re.search(RUNNERS, cmd, re.I) or parece_runner(cmd):
+def es_runner(orden):
+    """El runner tiene que estar EN POSICION DE COMANDO, no en cualquier parte
+    del texto. Sin esto, un `echo '{"cmd":"pytest"}'` contaba como suite verde:
+    el mismo fallo que ya tenia la deteccion de commits."""
+    for seg in re.split(r"(?:\|\||&&|[;&|\n])", orden):
+        seg = seg.strip()
+        seg = re.sub(r"^(?:\w+=\S+\s+)*", "", seg)
+        seg = re.sub(r"^(?:sudo|command|env|time|nice|nohup)\s+", "", seg)
+        if re.match(RUNNERS, seg, re.I) or parece_runner(seg):
+            return True
+    return False
+
+
+if es_runner(cmd):
     # El rojo se busca solo en la cola, que es donde va el resumen.
     cola = "\n".join(salida.splitlines()[-12:])
     ROJO = (r"\bFAILED\b|\bFAILURES\b|\bfailures?[:=]\s*[1-9]|\berrors?[:=]\s*[1-9]|"

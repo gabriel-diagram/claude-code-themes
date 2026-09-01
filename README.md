@@ -88,8 +88,8 @@ antes que hacer *wrap* (que descuadra la caja del prompt):
 ```
 ──────────────────────────────────────────────────────────────────────────────
  Opus 5  ██████░░░░░░░░░░ 36% · 1M ctx │ xhigh │ 42.7 tok/s │ bypass   vibrante
-rochas/api (fix-errors ✳) │ +184/−37 │ $28.29                          |   |
-~/srv/rochas/api │ 5h ████░░░░░░ 41%  7d █░░░░░░░░░ 13% │ 1h 12m      ▗█┼█┼█▖
+rochas/rochas-energy-backend (fix-errors ✳) │ +184/−37 │ $28.29        |   |
+api │ 5h ████░░░░░░ 41%  7d █░░░░░░░░░ 13% │ 1h 12m                   ▗█┼█┼█▖
                                                                      ▐█ > < █▌
                                                                       ▝█┼█┼█▘
 ▐█ > < █▌◗ racha de 5 días. no la rompas hoy                          ▝▝   ▘▘
@@ -118,10 +118,10 @@ pero sí en el transcript, cuya ruta sí llega. Se lee solo la cola del fichero
 (0,02 ms) y sale como distintivo en la banda. No es una copia del pie que pinta
 el propio Claude Code: aquello es suyo y no se puede tocar.
 
-- **Banda 3 · cuota** — directorio, límites 5h/7d y tiempo: se lee de reojo, va
-  en gris. El `~/` va más apagado que el resto de la ruta (y se va con ella si
-  la ruta se recorta a sus tres últimos tramos: fingirlo daría a entender que
-  cuelgan de tu casa cuando pueden colgar de tres carpetas más).
+- **Banda 3 · cuota** — carpeta, límites 5h/7d y tiempo: se lee de reojo, va en
+  gris. De la ruta sale **solo la carpeta en la que estás**, no el camino entero;
+  y si se llama igual que el repo —- es decir, estás en su raíz—- desaparece,
+  porque eso ya lo dice la banda 2.
 - **El bocadillo** cierra el pie. Quien habla lo dice la cara del propio bicho,
   con la cola apuntando al texto; sale solo cuando hay algo que decir y solo a
   partir de 100 columnas.

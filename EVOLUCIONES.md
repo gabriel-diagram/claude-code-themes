@@ -156,6 +156,13 @@ phpunit, rspec, mvn, gradle, dotnet, swift, flutter, mix, make/just/task…), un
 `bin/spec` cuentan; el `test` de shell no, que es una comparación de ficheros), y
 `PET_TEST_RUNNERS` para meter un regex propio.
 
+Y lo más importante: el runner tiene que estar **en posición de comando**, no en
+cualquier parte del texto. El comando se parte por los operadores de shell
+(`;`, `&&`, `||`, `|`) y cada trozo se mira por su principio, saltándose las
+asignaciones de entorno y el `sudo`. Sin eso, un `echo "lanza pytest"` o un
+`grep -rn "go test"` contaban como suite verde — el mismo fallo que ya tenía la
+detección de commits, arreglado aquí de la misma manera.
+
 **Commit hecho.** `git … commit` tiene que estar al principio del comando o
 detrás de un operador de shell. Sin ese anclaje, un `grep -rn "git commit"`
 contaba como commit.

@@ -75,7 +75,10 @@ ESTADOS = [
 # en blanco y los indices dicen donde van.
 PLANTILLAS = {
     # --- nivel 1 · larva
-    'chispa'       : ('         ', '  ▗▄▄▖   ', '  ▐    ▌ ', '  ▝▀▀▘   ', '   ▘▝    ', '..', (4, 6)),
+    # La cara ocupa las columnas 2-7, asi que su centro esta en 4,5: la cabeza
+    # (4 anchos) va de 3 a 6 y las patas (2) de 4 a 5. Cuadrarlas a la izquierda
+    # dejaba la cabeza descolgada una columna respecto al cuerpo.
+    'chispa'       : ('         ', '   ▗▄▄▖  ', '  ▐    ▌ ', '   ▝▀▀▘  ', '    ▘▝   ', '..', (4, 6)),
     # --- nivel 2 · temperamentos
     'pauta'        : ('  |   |  ', ' ▗█▀█▀█▖ ', '▐█     █▌', ' ▝█▄█▄█▘ ', '  ▘   ▝  ', '><', (3, 5)),
     'sonda'        : ('  \\ o    ', ' ▗█████▖ ', '▐█     █▌', ' ▝█████▘ ', '  ▘   ▝  ', 'OO', (3, 5)),
