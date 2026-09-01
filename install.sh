@@ -148,7 +148,11 @@ print("  statusLine enganchada")
 
 if con_hooks:
     cmd = os.path.join(destino, "pet-hook.sh")
-    quiero = {"PostToolUse": "Bash|TodoWrite", "PreCompact": None, "SessionEnd": None}
+    # PostToolUse va sin matcher a proposito: el francotirador cuenta CUANTAS
+    # herramientas distintas se usan entre dos tareas cerradas, o sea que hay que
+    # verlas todas. Para las que no interesan el hook sale en bash, sin arrancar
+    # python: unos 3 ms, contra los 15 que costaria el interprete.
+    quiero = {"PostToolUse": None, "PreCompact": None, "SessionEnd": None}
     h = d.setdefault("hooks", {})
     for ev, matcher in quiero.items():
         grupos = h.setdefault(ev, [])
@@ -159,7 +163,7 @@ if con_hooks:
         if matcher:
             g["matcher"] = matcher
         grupos.append(g)
-    print("  hooks enganchados: PostToolUse (Bash, TodoWrite), PreCompact, SessionEnd")
+    print("  hooks enganchados: PostToolUse (todas), PreCompact, SessionEnd")
 else:
     print("  hooks NO instalados (pásale --hooks si los quieres)")
 
