@@ -3,6 +3,10 @@
 Qué mide exactamente el bicho de la statusline, y qué hace que pase de *fresca* a
 *k.o.*
 
+Esta es **una de las dos capas**. La vida es del momento: sube y baja con el uso
+y se recupera al compactar. La otra capa, el progreso —la XP que elige en qué
+evoluciona—, está en [EVOLUCIONES.md](EVOLUCIONES.md) y no baja nunca.
+
 ## Un solo número
 
 Todo —estado, ojos, patas, cabeza, color— sale de **un número entre 0 y 100**: el
@@ -42,11 +46,14 @@ Por eso el reparto 50 / 30 / 20: manda lo que puedes tocar, y lo demás pondera.
 | --- | --- | --- | --- | --- |
 | ≤22% | fresca ✦ | `>` `<` | sí | anda |
 | ≤45% | vibrante | `>` `<` | sí | anda |
-| ≤63% | a gusto | `●` `●` | sí | anda |
+| ≤63% | a gusto | `o` `o` | sí | anda |
 | ≤78% | espesa | `▬` `▬` | sí | quieto |
-| ≤89% | cansada | `◠` `◠` | hundida | quieto |
-| <100% | ahogada | `✕` `✕` | hundida | quieto |
-| **100% exacto** | k.o. | `✕` `✕` | hundida | tumbado, patas al aire |
+| ≤89% | cansada | `_` `_` | hundida | quieto |
+| <100% | ahogada | `x` `x` | hundida | quieto |
+| **100% exacto** | k.o. | `x` `x` | hundida | tumbado, patas al aire |
+
+Con **hambre ≥7** los ojos no cambian de forma: se apagan de color. El hambre es
+de la otra capa y no toca el estado.
 
 Son **cuatro señales independientes** que se van cayendo en orden: primero los
 ojos, luego el paso de las patas, luego la cabeza se hunde y al final la silueta
@@ -73,6 +80,10 @@ ni el estado de git, ni la caché. Todo eso sale en las bandas de la izquierda,
 pero no le afecta al bicho. El uso es solo consumo de cuota y de contexto: lo que
 puede pararte.
 
+Tampoco mide el **progreso**. Que el bicho esté *k.o.* no lo devuelve a larva:
+la silueta la elige la XP, y la XP no la toca el uso. Un `cirujano` reventado
+sigue siendo un cirujano, con cara de haber visto cosas.
+
 ## Honestidad
 
 El bicho **no finge emociones**. No se pone contento porque el código compile ni
@@ -82,4 +93,5 @@ cansado, es que la media va por el 85%.
 ---
 
 Ver también el [README](README.md) para las bandas, la paleta y el resto de la
-statusline.
+statusline, y [EVOLUCIONES.md](EVOLUCIONES.md) para la otra capa: XP, hambre,
+comida y las 27 evoluciones.

@@ -2,7 +2,8 @@
 
 Tres temas de color para la CLI de [Claude Code](https://claude.com/claude-code)
 más una **statusline** de tres bandas con un bicho a la derecha que refleja el
-estado real de la sesión.
+estado real de la sesión — y que **evoluciona** según cómo trabajas: 27 formas
+en un árbol de cinco niveles, con XP, hambre y racha.
 
 | Tema | Acento | Look |
 | --- | --- | --- |
@@ -22,44 +23,44 @@ de sesión).*
 - `themes/blood-red.json` — tema cálido instalable vía `/theme`
 - `themes/electric-blue.json` — tema frío instalable vía `/theme`
 - `statusline.sh` — statusline de tres bandas con el bicho
-- [`VIDA.md`](VIDA.md) — qué mide el bicho, en detalle
+- `bicho.py` — las 27 plantillas, los siete estados y el árbol de evoluciones
+- `pet` — el panel del bicho (`/pet`) y su comida (`/feed`)
+- `hooks/pet-hook.sh` — traduce commits, tests y compactados en comida
+- `install.sh` — instala todo lo anterior; con `--hooks`, también los hooks
+- [`VIDA.md`](VIDA.md) — la capa del momento: qué hace que pase de fresca a k.o.
+- [`EVOLUCIONES.md`](EVOLUCIONES.md) — la capa permanente: XP, comida y las 27 formas
+- [`AUDITORIA.md`](AUDITORIA.md) — rendimiento y errores, medido
 
 ## Instalación
 
-### 1. Temas de color
+```bash
+./install.sh            # temas + statusline + bicho + /pet y /feed
+./install.sh --hooks    # además engancha los hooks que le dan de comer
+./install.sh --uninstall
+```
+
+Hace copia de seguridad de `~/.claude/settings.json` antes de tocarlo, es
+idempotente, y **no cambia el tema activo**: eso se elige con `/theme` → Terminal.
+
+Los **hooks van aparte a propósito**. Viven en `~/.claude/settings.json`, que es
+global, así que corren en todos tus repos. Sin ellos el bicho existe y se ve,
+pero no come solo: se le da con `/feed`.
+
+### A mano, si prefieres
 
 ```bash
 mkdir -p ~/.claude/themes
-cp themes/terminal.json      ~/.claude/themes/terminal.json
-cp themes/blood-red.json     ~/.claude/themes/blood-red.json
-cp themes/electric-blue.json ~/.claude/themes/electric-blue.json
+cp themes/*.json ~/.claude/themes/
+cp bicho.py ~/.claude/                      # las plantillas y el árbol
+install -m 755 statusline.sh ~/.claude/     # necesita bicho.py al lado
+install -m 755 pet ~/.claude/
 ```
 
-Dentro de una sesión de Claude Code, ejecuta `/theme` y elige el que quieras.
-Recargan en caliente al editar el JSON (no hace falta reiniciar).
-
-O actívalo directamente en `~/.claude/settings.json`:
+Y en `~/.claude/settings.json`:
 
 ```json
 {
-  "theme": "custom:terminal"
-}
-```
-
-> El slug (`custom:<slug>`) sale del **nombre del archivo** sin `.json`, no del
-> campo `"name"`. `blood-red.json` → `custom:blood-red`.
-
-### 2. Statusline
-
-```bash
-cp statusline.sh ~/.claude/statusline.sh
-chmod +x ~/.claude/statusline.sh
-```
-
-Añade (o mergea) en `~/.claude/settings.json`:
-
-```json
-{
+  "theme": "custom:terminal",
   "statusLine": {
     "type": "command",
     "command": "~/.claude/statusline.sh",
@@ -69,8 +70,12 @@ Añade (o mergea) en `~/.claude/settings.json`:
 }
 ```
 
-La statusline solo necesita `python3` (usa la librería estándar; nada de `jq`).
-`git` es opcional: si no está, degrada con elegancia.
+> El slug (`custom:<slug>`) sale del **nombre del archivo** sin `.json`, no del
+> campo `"name"`. `blood-red.json` → `custom:blood-red`.
+
+La statusline solo necesita `python3` (librería estándar; nada de `jq`). `git` es
+opcional: si no está, degrada con elegancia. Si falta `bicho.py`, la statusline
+sigue funcionando — sin bicho.
 
 ## La statusline en detalle
 
@@ -99,14 +104,15 @@ Por debajo de 55 columnas el bicho desaparece y quedan las tres bandas solas.
 
 ### El bicho
 
-Nueve columnas por cinco filas: antenas, cabeza, cara con orejas, cuerpo y patas.
+Nueve columnas por cinco filas. La silueta la elige la **evolución**; los ojos,
+las patas y el color los elige el **estado**.
 
 ```
-  ╲   ╱     <- antenas (se caen al llegar a cansada)
- ▗█████▖    <- cabeza
+  |   |     <- marca de la ramificación (se cae al llegar a cansada)
+ ▗█┼█┼█▖    <- cuerpo de la evolución
 ▐█ > < █▌   <- cara, con las orejas fuera
- ▝█████▘    <- cuerpo
-  ▘   ▝     <- patas
+ ▝█┼█┼█▘
+ ▘▘   ▝▝    <- patas
 ```
 
 Siete estados, y **cuatro señales independientes** que cambian en este orden: los
@@ -117,20 +123,43 @@ se tumba. A un vistazo se distingue *cansada* de *ahogada* sin leer la etiqueta.
 | --- | --- | --- | --- | --- |
 | ≤22% | fresca ✦ | `>` `<` | sí | anda |
 | ≤45% | vibrante | `>` `<` | sí | anda |
-| ≤63% | a gusto | `●` `●` | sí | anda |
+| ≤63% | a gusto | `o` `o` | sí | anda |
 | ≤78% | espesa | `▬` `▬` | sí | quieto |
-| ≤89% | cansada | `◠` `◠` | **hundida** | quieto |
-| <100% | ahogada | `✕` `✕` | hundida | quieto |
-| 100% | k.o. | `✕` `✕` | hundida | **tumbado**, patas al aire |
+| ≤89% | cansada | `_` `_` | **hundida** | quieto |
+| <100% | ahogada | `x` `x` | hundida | quieto |
+| 100% | k.o. | `x` `x` | hundida | **tumbado**, patas al aire |
+
+Los ojos de las dos primeras filas son **los de la evolución**, que tiene los
+suyos; de *a gusto* para abajo manda el estado. Así el cansancio se lee igual sea
+cual sea el bicho.
 
 **Movimiento.** Las patas alternan `▘ ▝` ↔ `▝ ▘` en cada refresco de la
 statusline: anda mientras trabajas y se queda quieto a partir de *espesa*. El
-parpadeo (`◠ ◠`) es un solo frame cada siete refrescos. Al cruzar un umbral la
+parpadeo (`_ _`) es un solo frame cada siete refrescos. Al cruzar un umbral la
 etiqueta sale en negrita un refresco — para eso guarda el estado anterior en
 `$TMPDIR/claude-statusline-<session_id>`.
 
 A 1 fps, unas patas alternando sin parar en la esquina del ojo pueden cansar:
 `STATUSLINE_BICHO_CALMA=1` lo deja andando solo cuatro segundos de cada doce.
+
+### Evoluciones
+
+La forma no la eliges: sale de cómo trabajas. Los commits y los `/compact` te
+llevan por la rama metódica, los tests y los planes por la inquisitiva, y
+reventar el contexto por la impulsiva.
+
+```
+chispa -> pauta / sonda / brasa -> siete oficios -> catorce marcas
+```
+
+```bash
+/pet     # nivel, evolución, xp, hambre, racha y la comida de hoy
+/feed    # +3 xp, hambre −2 (máximo 4 al día)
+```
+
+El árbol entero, la tabla de comida y qué alimenta cada contador están en
+[EVOLUCIONES.md](EVOLUCIONES.md). Sin `./install.sh --hooks` el bicho existe y
+se ve, pero solo come con `/feed`.
 
 ### El uso: media ponderada
 
