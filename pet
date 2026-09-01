@@ -14,6 +14,8 @@ export SL_DIR PET_ACCION="${1:-panel}" PET_NOTA="${2:-}" PET_EXTRA="${3:-}"
 exec python3 - <<'PYEOF'
 import json, os, sys, time
 
+# Ver statusline.sh: sin purgar el cwd, un bicho.py del repo abierto se ejecuta.
+sys.path[:] = [_p for _p in sys.path if _p not in ("", ".", os.getcwd())]
 sys.path.insert(0, os.environ.get("SL_DIR", ""))
 import bicho as BI
 
@@ -57,8 +59,16 @@ if accion == "sesion":
             h = json.load(fh)
     except Exception:
         raise SystemExit(0)
-    pico = float(h.get("pico") or 0)
-    dur = max(0, int(time.time()) - int(h.get("t0") or 0))
+    try:
+        pico = float(h.get("pico") or 0)
+    except (TypeError, ValueError):
+        pico = 0.0
+    # Sin un t0 creible no se cuenta la duracion: tratar su ausencia como epoch 0
+    # daba sesiones de 56 anos, que regalaban sesiones_largas y sesiones_4h.
+    t0 = h.get("t0")
+    dur = None
+    if isinstance(t0, (int, float)) and not isinstance(t0, bool) and t0 > 1e9:
+        dur = max(0, int(time.time()) - int(t0))
     pet = BI.leer_pet()
     if pico < 40:
         BI.contar(pet, "sesiones_bajo_40")
@@ -66,13 +76,13 @@ if accion == "sesion":
         BI.contar(pet, "ctx_bajo")
     if pico >= 99.999:
         BI.contar(pet, "sesiones_ctx100")
-    if dur and dur < 15 * 60:
+    if dur is not None and dur < 15 * 60:
         BI.contar(pet, "sesiones_cortas")
         BI.contar(pet, "sesiones_15min")
-    if dur >= 4 * 3600:
+    if dur is not None and dur >= 4 * 3600:
         BI.contar(pet, "sesiones_largas")
         BI.contar(pet, "sesiones_4h")
-    elif dur >= 90 * 60:
+    elif dur is not None and dur >= 90 * 60:
         BI.contar(pet, "sesiones_largas")
     # "5 dias seguidos en el mismo repo": solo cuenta el salto de dia.
     repo = h.get("repo") or ""
@@ -85,6 +95,7 @@ if accion == "sesion":
             c = pet.setdefault("contadores", {})
             c["dias_mismo_repo"] = (int(c.get("dias_mismo_repo", 0)) + 1) if seguido else 1
             pet["repo_dia"] = "%s|%s" % (repo, hoy)
+    pet["hambre_tope"] = int(pet.get("hambre", 0))
     BI.escribir_pet(pet)
     try:
         os.unlink(nota)

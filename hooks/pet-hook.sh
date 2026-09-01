@@ -66,8 +66,14 @@ if herr == "TodoWrite":
     # que se compara contra el recuento anterior guardado por sesion.
     todos = ent.get("todos") or []
     hechas = sum(1 for t in todos if (t or {}).get("status") == "completed")
+    # Mismo prefijo que el fichero de la statusline para que lo alcance su
+    # barrido de huerfanos, y mismo filtro de session_id: sin el, un id con
+    # ".." escribe fuera de TMPDIR.
+    _sid = str(h.get("session_id") or "")
+    if not re.match(r"^[A-Za-z0-9_-]{1,64}$", _sid):
+        raise SystemExit(0)
     marca = os.path.join(os.environ.get("TMPDIR", "/tmp"),
-                         "claude-pet-todos-" + str(h.get("session_id", "x"))[:64])
+                         "claude-statusline-todos-" + _sid)
     antes = 0
     try:
         with open(marca) as fh:
@@ -103,7 +109,11 @@ if isinstance(sal, dict) and sal.get("is_error"):
     raise SystemExit(0)
 
 # --- commit -----------------------------------------------------------------
-if re.search(r"\bgit\b(?:\s+-[^\s]+)*\s+commit\b", cmd) and "--dry-run" not in cmd:
+# Anclado al principio del comando o justo detras de un operador de shell: si no,
+# un `grep -rn "git commit"` cuenta como commit.
+GIT_COMMIT = (r"(?:^|[;&|(]|&&|\|\|)\s*(?:\w+=\S+\s+)*(?:sudo\s+)?"
+              r"git\b(?:\s+-[^\s]+(?:\s+\S+)?)*\s+commit\b")
+if re.search(GIT_COMMIT, cmd) and "--dry-run" not in cmd:
     if not re.search(r"nothing to commit|nada que (?:hacer|"
                      r"confirmar)|no changes added", salida, re.I):
         # "N files changed" da el ancho del commit, que es lo que mira tejedor.
@@ -123,8 +133,12 @@ RUNNERS = (r"\bpytest\b|\bpy\.test\b|\bunittest\b|"
 ROJO = (r"\bFAILED\b|\bFAIL\b|\bfailures?[:=]\s*[1-9]|\berrors?[:=]\s*[1-9]|"
         r"\b[1-9]\d*\s+failed\b|\bAssertionError\b|\bpanic:|\bFAILURES\b")
 if re.search(RUNNERS, cmd, re.I) and not re.search(ROJO, salida):
-    if re.search(r"\bpass(?:ed|ing)?\b|\bok\b|\b0 failures?\b|\bAll tests\b|"
-                 r"\bTests?:\s+\d+\s+passed|\bPASS\b", salida, re.I):
+    # El `ok` suelto valia para `go test`, pero bajo re.I casa con cualquier
+    # texto que diga "ok". Se limita a una linea que EMPIEZA por ok, que es la
+    # forma real de `go test`.
+    VERDE = (r"(?m)^ok\s|\bpass(?:ed|ing)\b|\b0 failures?\b|\bAll tests pass|"
+             r"\bTests?:\s+\d+\s+passed|\bPASS\b|\bOK\b\s*\(\d+ tests?\)")
+    if re.search(VERDE, salida):
         dar("tests")
 PYEOF
 )

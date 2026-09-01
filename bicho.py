@@ -227,28 +227,64 @@ def ruta_pet():
     return os.path.join(os.path.expanduser("~"), ".claude", "pet.json")
 
 
-PET_VACIO = {
-    "xp": 0, "hambre": 0, "comio": 0, "racha": 0, "mejor_racha": 0,
-    "ultimo_dia": "", "secreta": None, "repo_dia": "",
-    "contadores": {}, "hoy": [], "hoy_dia": "",
+# clave -> como se normaliza al leer. Un pet.json lo puede editar cualquiera
+# (o corromperlo un disco lleno), asi que NADA se cree sin pasar por aqui.
+_ENTERO = "entero"
+_TEXTO = "texto"
+CAMPOS = {
+    "xp": _ENTERO, "hambre": _ENTERO, "comio": _ENTERO, "racha": _ENTERO,
+    "mejor_racha": _ENTERO, "nivel_visto": _ENTERO, "hambre_tope": _ENTERO,
+    "feed_hoy": _ENTERO,
+    "ultimo_dia": _TEXTO, "repo_dia": _TEXTO, "hoy_dia": _TEXTO,
 }
 
 
+def nuevo_pet():
+    """Un bicho recien nacido. Funcion y no constante: si fuera un dict de modulo
+    todos los pets compartirian sus contadores."""
+    d = {k: (0 if t is _ENTERO else "") for k, t in CAMPOS.items()}
+    d.update({"secreta": None, "contadores": {}, "hoy": []})
+    return d
+
+
+PET_VACIO = nuevo_pet()      # solo para consultar las claves; no se muta
+
+
+def _entero(v, por_defecto=0):
+    if isinstance(v, bool) or v is None:
+        return por_defecto
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return por_defecto
+    return por_defecto if f != f or f in (float("inf"), float("-inf")) else int(f)
+
+
 def leer_pet(ruta=None):
-    """Nunca lanza. Un pet.json corrupto es un bicho recien nacido, no un crash."""
+    """Nunca lanza, y nunca devuelve un campo con un tipo que no sea el suyo.
+
+    Un pet.json corrupto es un bicho recien nacido, no un crash: si esto deja
+    pasar un texto donde va un numero, la statusline entera desaparece.
+    """
+    pet = nuevo_pet()
     try:
         with open(ruta or ruta_pet(), encoding="utf-8") as fh:
             d = json.load(fh)
         if not isinstance(d, dict):
-            raise ValueError
+            return pet
     except Exception:
-        return dict(PET_VACIO, contadores={}, hoy=[])
-    pet = dict(PET_VACIO)
-    pet.update({k: v for k, v in d.items() if k in PET_VACIO})
-    if not isinstance(pet.get("contadores"), dict):
-        pet["contadores"] = {}
-    if not isinstance(pet.get("hoy"), list):
-        pet["hoy"] = []
+        return pet
+    for k, t in CAMPOS.items():
+        if k in d:
+            pet[k] = _entero(d[k]) if t is _ENTERO else (
+                d[k] if isinstance(d[k], str) else "")
+    if isinstance(d.get("secreta"), str) and d["secreta"] in PLANTILLAS:
+        pet["secreta"] = d["secreta"]
+    if isinstance(d.get("contadores"), dict):
+        pet["contadores"] = {k: _entero(v) for k, v in d["contadores"].items()
+                             if isinstance(k, str)}
+    if isinstance(d.get("hoy"), list):
+        pet["hoy"] = [e for e in d["hoy"] if isinstance(e, dict)][-40:]
     return pet
 
 
@@ -296,6 +332,9 @@ def pasar_hambre(pet, ahora=None):
     if horas > 0:
         pet["hambre"] = min(HAMBRE_MAX, int(pet.get("hambre", 0)) + horas)
         pet["comio"] = comio + horas * 3600
+    # El pico de hambre se anota AQUI, que es donde sube. Anotarlo solo al comer
+    # se pierde justo el momento que le interesa al fenix.
+    pet["hambre_tope"] = max(int(pet.get("hambre_tope", 0)), int(pet.get("hambre", 0)))
     return pet
 
 
@@ -303,21 +342,26 @@ def alimentar(pet, evento, nota="", ahora=None):
     """Aplica una comida. Devuelve (pet, aplicado)."""
     if evento not in COMIDA:
         return pet, False
-    ahora = ahora or time.time()
+    ahora = ahora if ahora is not None else time.time()
     xp, dh, tope = COMIDA[evento]
-    dia = _hoy()
+    # El dia sale de `ahora` y no del reloj: si no, pasarle otra hora deja la
+    # racha en un estado incoherente y no hay forma de probarla.
+    dia = time.strftime("%Y-%m-%d", time.localtime(ahora))
     if pet.get("hoy_dia") != dia:
         pet["hoy_dia"] = dia
         pet["hoy"] = []
-    if tope is not None:
-        if sum(1 for e in pet["hoy"] if e.get("q") == evento) >= tope:
-            return pet, False
-    antes_niv = nivel_de(pet.get("xp", 0))
+        pet["feed_hoy"] = 0
+    # El tope diario lleva su propio contador: `hoy` es un registro acotado a 40
+    # entradas, asi que contar sobre el se salta el tope en cuanto rota.
+    if tope is not None and int(pet.get("feed_hoy", 0)) >= tope:
+        return pet, False
     pet["xp"] = max(0, int(pet.get("xp", 0)) + xp)
     if dh:
         pet["hambre"] = max(0, min(HAMBRE_MAX, int(pet.get("hambre", 0)) + dh))
     if xp > 0:
-        pet["comio"] = ahora
+        pet["comio"] = int(ahora)
+    if tope is not None:
+        pet["feed_hoy"] = int(pet.get("feed_hoy", 0)) + 1
     # racha de dias
     ayer = time.strftime("%Y-%m-%d", time.localtime(ahora - 86400))
     ult = pet.get("ultimo_dia") or ""
@@ -325,10 +369,37 @@ def alimentar(pet, evento, nota="", ahora=None):
         pet["racha"] = int(pet.get("racha", 0)) + 1 if ult == ayer else 1
         pet["mejor_racha"] = max(int(pet.get("mejor_racha", 0)), pet["racha"])
         pet["ultimo_dia"] = dia
-    pet["hoy"].append({"q": evento, "xp": xp, "t": int(ahora), "n": nota[:40]})
+    pet["hoy"].append({"q": evento, "xp": xp, "t": int(ahora), "n": str(nota)[:40]})
     pet["hoy"] = pet["hoy"][-40:]
-    pet["_subio"] = nivel_de(pet["xp"]) > antes_niv
+    secretas(pet)
     return pet, True
+
+
+def secretas(pet):
+    """Las dos de nivel 5 que no salen del arbol. Se comprueban al comer, que es
+    lo unico que mueve hambre y XP."""
+    if pet.get("secreta"):
+        return pet
+    hambre = int(pet.get("hambre", 0))
+    pet["hambre_tope"] = max(int(pet.get("hambre_tope", 0)), hambre)
+
+    # fenix: tocar hambre 10 y volver a 0 en la MISMA sesion, y solo desde las
+    # dos evoluciones que se dejan llegar ahi. `hambre_tope` lo pone a cero el
+    # cierre de sesion.
+    if (hambre == 0 and int(pet.get("hambre_tope", 0)) >= HAMBRE_MAX
+            and evolucion(pet)[0] in ("salvaje", "maraton")):
+        pet["secreta"] = "fenix"
+        return pet
+
+    # quimera: dos temperamentos empatados al llegar a nivel 4. Hereda ojos de
+    # uno y cuerpo del otro, que es lo que dibuja su plantilla.
+    if nivel_de(pet.get("xp", 0)) >= 4:
+        c = pet.get("contadores", {})
+        temps = sorted((int(c.get(t, 0)) for t in ("metodico", "inquisitivo", "impulsivo")),
+                       reverse=True)
+        if temps[0] > 0 and temps[0] == temps[1]:
+            pet["secreta"] = "quimera"
+    return pet
 
 
 def contar(pet, contador, n=1):
@@ -396,6 +467,11 @@ def dibujar(criatura, est, paso=0, hambre=0, veinticuatro=True):
     # Parpadeo: un frame de cada siete, solo mientras anda.
     if anda and paso % 7 == 3:
         ojos = ("_", "_")
+
+    # A 1 fps unas patas alternando sin parar en la esquina del ojo cansan:
+    # STATUSLINE_BICHO_CALMA=1 lo deja andando 4 segundos de cada 12.
+    if anda and os.environ.get("STATUSLINE_BICHO_CALMA", "").lower() in ("1", "on", "yes"):
+        anda = paso % 12 < 4
 
     ko = etq == "k.o."
     if ko:

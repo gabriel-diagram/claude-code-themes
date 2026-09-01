@@ -144,14 +144,19 @@ Las otras nueve sí salen, y los siete oficios también.
 
 Dos de las comidas son **adivinanzas sobre texto**, no hechos:
 
-- **«tests en verde»** se detecta por el comando (una lista de runners conocidos)
-  y por que la salida no contenga patrones de fallo. Un runner exótico no cuenta;
-  un test que se llame `test_login_failed` puede contar como rojo.
-- **«commit hecho»** se detecta por `git … commit` y que la salida no diga
-  `nothing to commit`. Es bastante fiable, pero sigue siendo texto.
+- **«commit hecho»** pide que `git … commit` esté al **principio del comando** o
+  justo detrás de un operador de shell (`;`, `&&`, `|`, `(`). Sin ese anclaje, un
+  `grep -rn "git commit"` contaba como commit. Además la salida no puede decir
+  `nothing to commit`. Es la más fiable de las dos, y aun así es texto.
+- **«tests en verde»** pide que el comando mencione un runner conocido y que la
+  salida tenga una marca de verde (`^ok `, `passed`, `PASS`, `0 failures`…) y
+  ninguna de rojo. Un runner exótico no cuenta; un test llamado
+  `test_login_failed` puede contar como rojo.
 
-La lista de patrones está arriba del todo en `hooks/pet-hook.sh` y se toca sin
-miedo. No hay forma de hacerlo exacto mientras el CLI no exponga el resultado.
+Los dos patrones están arriba del todo en `hooks/pet-hook.sh` y se tocan sin
+miedo. **Cualquier heurística sobre texto tiene falsos positivos**: la regla al
+escribirlas ha sido preferir perderse una comida a inventarse una. No hay forma
+de hacerlo exacto mientras el CLI no exponga el resultado de la herramienta.
 
 ## Los mandos
 

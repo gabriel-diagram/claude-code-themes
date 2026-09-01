@@ -38,12 +38,18 @@ respaldo() {
 if [ "$QUITAR" = 1 ]; then
   echo "Desinstalando..."
   respaldo
-  python3 - "$AJUSTES" <<'PY'
+  python3 - "$AJUSTES" <<'PY' || echo "  settings.json ilegible: sigo y borro los ficheros"
 import json, sys, os
 p = sys.argv[1]
 if not os.path.exists(p):
     raise SystemExit(0)
-d = json.load(open(p, encoding="utf-8"))
+try:
+    d = json.load(open(p, encoding="utf-8"))
+except Exception as e:
+    # Se avisa y se sigue: si esto abortara, con `set -e` no se borraria
+    # ningun fichero y no habria forma de desinstalar sin editar json a mano.
+    print("  no puedo tocar settings.json (%s)" % e, file=sys.stderr)
+    raise SystemExit(1)
 d.pop("statusLine", None)
 h = d.get("hooks") or {}
 for ev in list(h):
@@ -56,7 +62,29 @@ if h:
     d["hooks"] = h
 else:
     d.pop("hooks", None)
-json.dump(d, open(p, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+
+def guardar(d, p):
+    """Escritura atomica. Este fichero lleva tu modelo, tus permisos y tus MCP:
+    un `open(p,"w")` lo trunca ANTES de escribir, asi que un fallo a media
+    escritura lo deja vacio. Temporal al lado y rename, que es atomico."""
+    import tempfile
+    dirn = os.path.dirname(os.path.abspath(p)) or "."
+    fd, tmp = tempfile.mkstemp(dir=dirn, prefix=".settings-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(d, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, p)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+guardar(d, p)
 print("  settings.json limpio (el tema no se toca: cambialo con /theme)")
 PY
   rm -f "$DESTINO/statusline.sh" "$DESTINO/bicho.py" "$DESTINO/pet" \
@@ -135,7 +163,29 @@ if con_hooks:
 else:
     print("  hooks NO instalados (pásale --hooks si los quieres)")
 
-json.dump(d, open(p, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+
+def guardar(d, p):
+    """Escritura atomica. Este fichero lleva tu modelo, tus permisos y tus MCP:
+    un `open(p,"w")` lo trunca ANTES de escribir, asi que un fallo a media
+    escritura lo deja vacio. Temporal al lado y rename, que es atomico."""
+    import tempfile
+    dirn = os.path.dirname(os.path.abspath(p)) or "."
+    fd, tmp = tempfile.mkstemp(dir=dirn, prefix=".settings-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(d, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, p)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+guardar(d, p)
 PY
 
 echo

@@ -255,3 +255,61 @@ Dos decisiones de diseño salieron de esta auditoría:
 Y una que no cambió: `git --no-optional-locks` **sí** está aplicado, aunque la
 auditoría lo clasificara como profiláctico. Es gratis y el escenario que evita
 —dos sesiones peleándose por `index.lock`— es real aunque no lo reprodujera.
+
+---
+
+## Segunda ronda: la revisión de las evoluciones
+
+Un `/code-review` sobre el commit de las evoluciones sacó **quince hallazgos, los
+quince reales**. Reproduje los tres peores antes de tocar nada. Todos arreglados.
+
+### El grave
+
+**Ejecución de código desde cualquier repo que abras.** `python3 -c` mete el
+directorio actual en `sys.path` como `""`, y la statusline corre con el cwd
+puesto en tu proyecto. `sys.path.insert(0, SL_DIR)` empujaba el cwd a la
+posición 1 en vez de quitarlo, así que **si faltaba `bicho.py` en `~/.claude` —el
+camino de degradación que el propio README anuncia— se importaba el `bicho.py`
+del repo abierto**, ejecutándolo una vez por refresco, con la excepción tragada
+por el `try` del import. Reproducido: `*** CODIGO DEL REPO EJECUTADO ***`, rc=0,
+sin rastro. Ahora el cwd se purga de `sys.path` antes de importar.
+
+### El vergonzoso
+
+**El bug 1 de la primera ronda, reintroducido en dos ficheros nuevos.** El
+`num()` que blinda el JSON de stdin no se aplicó ni a `~/.claude/pet.json` ni al
+fichero de sesión de `/tmp`. Un `{"hambre":"mucha"}` volvía a dejar la statusline
+en blanco. Los dos ficheros son editables por cualquiera y uno vive en `/tmp`.
+Ahora todo campo de los dos pasa por un normalizador de tipos.
+
+### Los otros trece
+
+| Qué | Cómo se veía |
+| --- | --- |
+| `dict(PET_VACIO)` era copia superficial | `contadores` aliasaba el dict del módulo: un `contar()` contaminaba todas las lecturas siguientes del proceso |
+| `sesiones_ctx100` contado dos veces | el kraken se alcanzaba en 2 sesiones en vez de 3 |
+| `t0` ausente = epoch 0 | sesiones de 56 años que regalaban `buey` |
+| `_subio` filtrado por `leer_pet` | el bocadillo de subida de nivel era código muerto |
+| tope diario de `/feed` sobre `hoy[-40:]` | se saltaba en cuanto rotaba el registro |
+| `git commit` sin anclar | un `grep "git commit"` daba +12 xp |
+| `\bok\b` con `re.I` | cualquier salida que dijera "ok" daba +15 xp |
+| `session_id` sin validar en un `open()` | travesía de ruta fuera de `TMPDIR` |
+| marcadores `claude-pet-todos-*` | prefijo que el barrido de huérfanos no alcanzaba |
+| `json.load` sin `try` en el desinstalador | con `set -e`, un settings.json roto impedía desinstalar |
+| `settings.json` escrito sin átomo | un fallo a media escritura vaciaba tu configuración global |
+| `alimentar(ahora=…)` a medias | `dia` del reloj real y `ayer` del parámetro |
+| `fenix` y `quimera` inalcanzables | nadie escribía `secreta`: dos plantillas eran datos muertos |
+
+Las dos últimas se arreglaron **implementándolas**, no documentándolas: el fénix
+pide tocar hambre 10 y volver a 0 en la misma sesión desde `salvaje` o `maratón`,
+y la quimera dos temperamentos empatados al llegar a nivel 4. Las 27 plantillas
+son ahora alcanzables.
+
+### Lo que enseña
+
+Los cuatro bugs de la primera ronda eran de **entrada externa mal validada**.
+Doce de estos quince también. La diferencia es que en la primera ronda había una
+sola entrada —el JSON de stdin— y en esta hay cuatro: stdin, `pet.json`, el
+fichero de sesión y el JSON del hook. **Blindé la que ya conocía y no las tres
+nuevas.** La lección no es "validar más": es que cada fichero que se añade es una
+frontera de confianza nueva, y conviene contarlas.

@@ -15,7 +15,14 @@ export SL_DIR
 PY_SRC=$(cat <<'PYEOF'
 import sys, json, os, re, subprocess, time
 
-sys.path.insert(0, os.environ.get("SL_DIR", ""))
+# `python3 -c` mete el directorio actual en sys.path como "". La statusline
+# corre con el cwd puesto en el repo que tengas abierto, asi que sin purgarlo
+# un bicho.py cualquiera de ese repo se importaria —y se ejecutaria— una vez
+# por refresco, con la excepcion tragada por el try de abajo.
+sys.path[:] = [_p for _p in sys.path if _p not in ("", ".", os.getcwd())]
+_SL_DIR = os.environ.get("SL_DIR", "")
+if _SL_DIR:
+    sys.path.insert(0, _SL_DIR)
 try:
     import bicho as BI
 except Exception:
@@ -318,6 +325,10 @@ if BICHO:
     BI.pasar_hambre(pet)
     criatura, nivel = BI.evolucion(pet)
     hambre = int(pet.get("hambre", 0))
+    # La subida de nivel se detecta comparando con el ultimo nivel anunciado,
+    # que vive en el propio pet.json. (Antes se miraba una clave que `alimentar`
+    # ponia y `leer_pet` filtraba, o sea nunca.)
+    subio = nivel > int(pet.get("nivel_visto", 0))
 
     paso = int(time.time())
     filas = BI.dibujar(criatura, E, paso=paso, hambre=hambre, veinticuatro=_TRUE)
@@ -339,13 +350,20 @@ if BICHO:
                 _crudo = _fh.read().strip()
             if _crudo.startswith("{"):
                 _hechos = json.loads(_crudo)
-                _antes = _hechos.get("etq")
+                if not isinstance(_hechos, dict):
+                    _hechos = {}
+                _e = _hechos.get("etq")
+                _antes = _e if isinstance(_e, str) else None
             else:
                 _antes = _crudo or None
         except Exception:
-            pass
-        _pico = max(float(_hechos.get("pico", 0)), uso)
-        _sube_pico = _pico >= float(_hechos.get("pico", 0)) + 1.0
+            _hechos = {}
+        # Este fichero es de /tmp: lo puede tocar cualquiera y una escritura
+        # interrumpida lo deja a medias. Sus campos se tratan como sospechosos.
+        _pico_ant = num(_hechos.get("pico")) or 0.0
+        _t0 = num(_hechos.get("t0"))
+        _pico = max(_pico_ant, uso)
+        _sube_pico = _pico >= _pico_ant + 1.0
         salta = _antes is not None and _antes != etq
         # Solo se escribe cuando cambia: esto corre en cada refresco.
         if _antes != etq or _sube_pico:
@@ -359,7 +377,9 @@ if BICHO:
                     if _ok:
                         BI.contar(_p2, "impulsivo")
                         BI.contar(_p2, "ctx_limite")
-                        BI.contar(_p2, "sesiones_ctx100")
+                        # sesiones_ctx100 NO se toca aqui: lo cuenta `pet sesion`
+                        # al cerrar, que es una vez por sesion. Contarlo en los
+                        # dos sitios hacia alcanzable el kraken en dos sesiones.
                         _p2["contadores"]["racha_tests"] = 0
                         _p2["contadores"]["racha_diffs"] = 0
                         BI.escribir_pet(_p2)
@@ -368,7 +388,7 @@ if BICHO:
             try:
                 with open(_f, "w") as _fh:
                     json.dump({"etq": etq, "pico": round(_pico, 1),
-                               "t0": _hechos.get("t0") or int(time.time()),
+                               "t0": int(_t0) if _t0 and _t0 > 1e9 else int(time.time()),
                                "repo": repo or ""}, _fh)
             except Exception:
                 pass
@@ -376,7 +396,7 @@ if BICHO:
             try:
                 _limite = time.time() - 86400
                 for _n in os.listdir(_tmp):
-                    if _n.startswith("claude-statusline-"):
+                    if _n.startswith("claude-statusline-"):   # incluye los -todos-
                         _p = os.path.join(_tmp, _n)
                         if os.path.getmtime(_p) < _limite:
                             os.unlink(_p)
@@ -389,8 +409,14 @@ if BICHO:
 
     # El bocadillo sale solo cuando hay algo que decir, y solo si cabe.
     if COLS >= BOCADILLO_MIN:
-        if pet.get("_subio"):
+        if subio:
             bocadillo = "nivel %d. %s" % (nivel, BI.BONITO.get(criatura, criatura))
+            try:
+                _p3 = BI.leer_pet()
+                _p3["nivel_visto"] = nivel
+                BI.escribir_pet(_p3)
+            except Exception:
+                pass
         elif hambre >= BI.HAMBRE_AVISA:
             bocadillo = "llevo %dh sin comer. /feed" % hambre
         elif etq == "k.o.":
