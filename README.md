@@ -97,7 +97,8 @@ xhigh │ 5h 28% 7d 12%                                   ███████�
 *El bicho* refleja el **estado real** de la sesión. La "vida" es `100 − peor
 cuello` entre contexto, límite de 5h y límite de 7d, con curva cuadrática (el
 margen no "duele" hasta acercarse al tope). No finge emociones: si un límite
-llega al 100%, el bicho hace k.o. y te dice qué lo mató.
+llega al 100%, el bicho hace k.o. y te dice qué lo mató. El desglose completo
+—fórmula, umbrales de cada estado y qué NO mide— está en **[VIDA.md](VIDA.md)**.
 
 Por debajo de 60 columnas la tarjeta desaparece y se vuelve al diseño compacto de
 **tres filas**, con los datos en una sola línea y la carita en línea: `✦ ◕▿◕
