@@ -7,8 +7,8 @@ Todo lo que hay aquí está **medido, no estimado**. Lo que no pude reproducir e
 en [Descartado](#descartado) para que nadie lo vuelva a perseguir.
 
 > **Estado a 1 de septiembre de 2026.** Los bugs 1-4 están **arreglados** y el
-> `python3 -S` **aplicado**, en el mismo commit que trajo las evoluciones. Los
-> puntos de diseño 5 y 6 siguen abiertos a propósito. Las medidas de más abajo
+> `python3 -S` **aplicado**. Los puntos de diseño 5 y 6 también están cerrados
+> ya: ver «Los dos puntos de diseño» al final. Las medidas de más abajo
 > son las de *antes* de arreglar nada: son la línea base, y las dejo tal cual
 > para que se pueda comparar. Al final hay una sección con las de después.
 
@@ -313,3 +313,37 @@ sola entrada —el JSON de stdin— y en esta hay cuatro: stdin, `pet.json`, el
 fichero de sesión y el JSON del hook. **Blindé la que ya conocía y no las tres
 nuevas.** La lección no es "validar más": es que cada fichero que se añade es una
 frontera de confianza nueva, y conviene contarlas.
+
+---
+
+## Los dos puntos de diseño, cerrados
+
+### 5 · El k.o. ya es alcanzable
+
+Exigir el 100% de la **media** era exigir los tres consumos al 100% a la vez: con
+ctx, 5h y 7d al 100, 90 y 90 la media daba 95, o sea *ahogada*. El sprite en el
+que más trabajo se invirtió no se veía nunca.
+
+Ahora el k.o. tiene **puerta propia**: salta en cuanto el contexto llega al 100%,
+sin mirar la media. Es coherente con por qué la media pondera 50/30/20 — el
+contexto es lo único que te para de verdad — y no toca ningún otro estado.
+
+### 6 · La calma es el defecto
+
+`STATUSLINE_BICHO_CALMA` pasó de ser un apaño opcional a no existir (se perdió al
+mover el dibujo a `bicho.py`) y luego a existir otra vez. Ahora está resuelto al
+revés: **por defecto anda cuatro segundos de cada doce**, y `STATUSLINE_BICHO_ANDA=1`
+devuelve el baile continuo que pedía el diseño. Un movimiento perpetuo en la
+esquina del ojo a 1 fps es un coste de atención permanente a cambio de nada.
+
+## Y una lección que no es de código
+
+Al hacer estos cambios descubrí que **otra sesión de Claude estaba editando este
+mismo repo a la vez** (`claude-code-themes-84`, rediseñando la salida como un pie
+con fondo y raya). Mis parches y los suyos se aplicaron sobre el mismo árbol de
+trabajo sin colisionar por pura suerte: usé reemplazo de cadenas con anclas que
+seguían existiendo.
+
+Que funcionara no lo hace correcto. Lo que hay que hacer antes de editar un
+fichero en un repo compartido es mirar `git status` **y** si hay otras sesiones
+vivas, no descubrirlo a mitad de camino porque la salida no cuadraba.

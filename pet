@@ -5,6 +5,7 @@
 #   pet feed     darle de comer (+3 xp, hambre -2, maximo 4 al dia)
 #   pet <evento> comida desde un hook: tests | commit | compact | tarea | reventon
 #   pet cuenta <contador> [n]     suma a un contador de comportamiento
+#   pet dia <nombre>              cuenta DIAS SEGUIDOS, no veces
 #   pet record <contador> <valor> guarda el maximo de un contador
 #   pet sesion <fichero>          cierra una sesion: sus hechos pasan a contadores
 #
@@ -40,6 +41,25 @@ extra = os.environ.get("PET_EXTRA", "")
 # ---------------------------------------------------------------------------
 # CONTADORES — los que eligen la rama. No dan xp: solo describen como trabajas.
 # ---------------------------------------------------------------------------
+if accion == "dia":
+    # "dos dias seguidos": no es un total, es una racha de dias. Solo cuenta el
+    # salto de dia, asi que repetirlo veinte veces el mismo dia no suma.
+    if not nota:
+        raise SystemExit(2)
+    pet = BI.leer_pet()
+    clave, hoy = "dias_" + nota, time.strftime("%Y-%m-%d")
+    marcas = pet.get("marcas_dia")
+    marcas = marcas if isinstance(marcas, dict) else {}
+    ult = marcas.get(clave)
+    if ult != hoy:
+        ayer = time.strftime("%Y-%m-%d", time.localtime(time.time() - 86400))
+        c = pet.setdefault("contadores", {})
+        c[clave] = (int(c.get(clave, 0)) + 1) if ult == ayer else 1
+        marcas[clave] = hoy
+        pet["marcas_dia"] = marcas
+        BI.escribir_pet(pet)
+    raise SystemExit(0)
+
 if accion in ("cuenta", "record"):
     if not nota:
         raise SystemExit(2)

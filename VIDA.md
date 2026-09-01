@@ -50,7 +50,7 @@ Por eso el reparto 50 / 30 / 20: manda lo que puedes tocar, y lo demás pondera.
 | ≤78% | espesa | `▬` `▬` | sí | quieto |
 | ≤89% | cansada | `_` `_` | hundida | quieto |
 | <100% | ahogada | `x` `x` | hundida | quieto |
-| **100% exacto** | k.o. | `x` `x` | hundida | tumbado, patas al aire |
+| **contexto al 100%** | k.o. | `x` `x` | hundida | tumbado, patas al aire |
 
 Con **hambre ≥7** los ojos no cambian de forma: se apagan de color. El hambre es
 de la otra capa y no toca el estado.
@@ -59,9 +59,13 @@ Son **cuatro señales independientes** que se van cayendo en orden: primero los
 ojos, luego el paso de las patas, luego la cabeza se hunde y al final la silueta
 se tumba. A un vistazo se distingue *cansada* de *ahogada* sin leer la etiqueta.
 
-**El k.o. es literal.** Al ser una media, hace falta el 100% clavado: con el
-contexto al 100% pero los límites a cero, el uso sale 50 y el bicho está *a
-gusto*. El k.o. de verdad es que se te haya acabado todo a la vez.
+**El k.o. tiene su propia puerta.** Al ser una media, exigir el 100% de la media
+significaba exigir los tres consumos al 100% *a la vez*: con ctx, 5h y 7d al 100,
+90 y 90 la media sale 95, o sea *ahogada*. Ese sprite no se veía nunca.
+
+Así que el k.o. salta en cuanto **el contexto llega al 100%**, sin mirar la media.
+Es coherente con por qué la media pondera como pondera: el contexto es lo único
+que te para de verdad, y cuando se llena da igual cómo estén los otros dos.
 
 ## Cuando falta algún dato
 

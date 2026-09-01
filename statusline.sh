@@ -68,6 +68,11 @@ DIR   = (_hx("#8d99a6"), 246)   # el directorio, un gris por encima del tenue
 CUOTA = (_hx("#4ea3f5"),  75)   # barras de límite
 VACIO = (_hx("#1d2b38"), 235)   # hueco de las barras de límite
 CTXV  = (_hx("#24382c"), 235)   # hueco de la barra de contexto
+FONDO = (_hx("#0a0d0f"), 233)   # el pie: un tono por encima del negro
+BORDE = (_hx("#161c21"), 234)   # la raya fina que lo separa del hilo
+DIRT  = (_hx("#4a545f"), 240)   # el "~/" del directorio, mas apagado
+COLA  = (_hx("#3a444e"), 238)   # la cola del bocadillo
+TEXTO = (_hx("#c9d1d9"), 252)   # lo que dice el bicho
 
 SEP = c(RAYA) + "│" + R
 ANSI = re.compile("\033\\[[0-9;]*m")
@@ -174,11 +179,6 @@ def padr(s, w):
     return s + (" " * n) if n > 0 else s
 
 
-def padl(s, w):
-    n = w - vis(s)
-    return (" " * n) + s if n > 0 else s
-
-
 def ctr(plain, coloreado, w=BICHO_W):
     n = w - len(plain)
     if n < 0:
@@ -201,7 +201,14 @@ cwd = g(d, "workspace", "current_dir") or d.get("cwd") or os.getcwd()
 home = os.path.expanduser("~")
 ddir = "~" + cwd[len(home):] if cwd.startswith(home) else cwd
 partes = ddir.rstrip("/").split("/")
-dircorto = "/".join(partes[-3:]) if len(partes) > 3 else ddir
+# El "~/" se pinta mas apagado que el resto de la ruta. Si la ruta se recorta
+# desaparece con lo demas: fingirlo dejaria entender que "srv" cuelga de tu casa
+# cuando puede colgar de tres carpetas mas.
+dircola = "/".join(partes[-3:]) if len(partes) > 3 else ddir
+dirpre = ""
+if dircola.startswith("~/"):
+    dirpre, dircola = "~/", dircola[2:]
+dircorto = dirpre + dircola
 
 esfuerzo = g(d, "effort", "level")
 vim = g(d, "vim", "mode")
@@ -214,6 +221,34 @@ ctxsz = num(g(d, "context_window", "context_window_size"))
 cache = num(g(d, "prompt_cache", "hit_ratio"))
 rl5 = num(g(d, "rate_limits", "five_hour", "used_percentage"))
 rl7 = num(g(d, "rate_limits", "seven_day", "used_percentage"))
+salida_tok = num(g(d, "context_window", "total_output_tokens"))
+api_ms = num(g(d, "cost", "total_api_duration_ms"))
+prompt_id = d.get("prompt_id")
+transcripcion = d.get("transcript_path")
+
+
+def modo_permisos(ruta):
+    """El modo de permisos no viene en el payload, pero si en el transcript, que
+    si llega. Se lee solo la COLA del fichero: es un jsonl de megas y esto corre
+    en cada refresco."""
+    if not ruta:
+        return None
+    try:
+        tam = os.path.getsize(ruta)
+        with open(ruta, "rb") as fh:
+            fh.seek(max(0, tam - 32768))
+            cola = fh.read().decode("utf-8", "replace")
+    except Exception:
+        return None
+    ult = None
+    for ult in re.finditer(r'"permissionMode"\s*:\s*"([A-Za-z]+)"', cola):
+        pass
+    return ult.group(1) if ult else None
+
+
+MODOS = {"bypassPermissions": "bypass", "acceptEdits": "auto-edit",
+         "plan": "plan", "dangerouslySkipPermissions": "bypass"}
+permisos = MODOS.get(modo_permisos(transcripcion) or "")
 
 
 def ctxlabel(n):
@@ -238,7 +273,14 @@ def duracion(ms):
     return "%ds" % s
 
 
+# La identidad del repo la manda el propio payload cuando hay remoto:
+# owner/nombre, como en el diseño. Sin remoto no hay owner que enseñar, y la
+# carpeta de al lado no lo es: se queda el nombre a secas.
+_rjson = g(d, "workspace", "repo")
 repo = None
+if isinstance(_rjson, dict) and _rjson.get("name"):
+    _own = _rjson.get("owner")
+    repo = ("%s/%s" % (_own, _rjson["name"])) if _own else str(_rjson["name"])
 rama = None
 sucio = ""
 try:
@@ -248,7 +290,7 @@ try:
     if len(p) >= 2 and p[0].strip():
         raiz = p[0].strip()
         trozos = raiz.rstrip("/").split("/")
-        repo = "/".join(trozos[-2:]) if len(trozos) > 1 else trozos[-1]
+        repo = repo or trozos[-1]
         rama = p[1].strip() or None
         est = subprocess.run(["git", "--no-optional-locks", "-C", cwd,
                               "status", "--porcelain"],
@@ -257,6 +299,62 @@ try:
             sucio = " " + c(NUM) + "✳" + R
 except Exception:
     pass
+
+# ---------------------------------------------------------------------------
+# SESION — lo que solo se sabe comparando este refresco con el anterior.
+# Vive en $TMPDIR/claude-statusline-<session_id>. De aqui salen el ritmo de
+# tokens, el pico de contexto y los turnos en bypass, y el hook de SessionEnd
+# lo convierte en contadores de comportamiento.
+# ---------------------------------------------------------------------------
+_sid = d.get("session_id")
+_sid = str(_sid) if _sid and re.match(r"^[A-Za-z0-9_-]{1,64}$", str(_sid)) else None
+_tmp = os.environ.get("TMPDIR", "/tmp")
+_f = os.path.join(_tmp, "claude-statusline-" + _sid) if _sid else None
+_hechos = {}
+if _f:
+    try:
+        with open(_f) as _fh:
+            _crudo = _fh.read().strip()
+        if _crudo.startswith("{"):
+            _hechos = json.loads(_crudo)
+            if not isinstance(_hechos, dict):
+                _hechos = {}
+        elif _crudo:
+            _hechos = {"etq": _crudo}
+    except Exception:
+        _hechos = {}
+
+_e = _hechos.get("etq")
+_antes = _e if isinstance(_e, str) else None
+_pico_ant = num(_hechos.get("pico")) or 0.0
+_t0 = num(_hechos.get("t0"))
+_ahora = time.time()
+
+# Ritmo de salida. Los dos campos NO miden lo mismo, y ahi esta el truco:
+# `total_output_tokens` es lo que sacó la ULTIMA respuesta —- se reinicia en cada
+# turno, no es un contador que sube—- y `total_api_duration_ms` es el tiempo de
+# API ACUMULADO de la sesion. El ritmo de la ultima respuesta es lo primero
+# entre lo que ha crecido lo segundo. Restar dos `total_output_tokens` seguidos
+# no mide nada: son dos respuestas distintas.
+_api_ant = num(_hechos.get("api"))
+_api_t = _api_ant
+tps = num(_hechos.get("tps"))
+_tps_t = num(_hechos.get("tps_t")) or 0.0
+if salida_tok and api_ms is not None:
+    if _api_ant is not None and api_ms > _api_ant:
+        _dt = (api_ms - _api_ant) / 1000.0
+        # Menos de 300 ms de API no da una medida: seria ruido dividido.
+        if 0.3 <= _dt <= 600:
+            tps = salida_tok / _dt
+            _tps_t = _ahora
+    _api_t = api_ms
+# Cuando el modelo lleva un rato callado el ultimo ritmo ya no dice nada.
+if _ahora - _tps_t > 120:
+    tps = None
+
+# "30 turnos con permisos en bypass": un turno es un prompt, y el payload trae
+# su id. Se cuenta al cambiar de prompt, no en cada refresco.
+_turno_nuevo = bool(prompt_id) and _hechos.get("pid") != prompt_id
 
 # ---------------------------------------------------------------------------
 # BANDA 1 · MOTOR
@@ -274,12 +372,22 @@ if _cl:
                   sep=" " + c(RAYA) + "·" + R + " "))
 if esfuerzo:
     b1.append(seg(2, c(MODO) + str(esfuerzo) + R, color=c(MODO), plain=str(esfuerzo)))
-if cache is not None:
+if tps is not None:
+    _t = "%.1f" % tps if tps < 100 else "%d" % round(tps)
+    b1.append(seg(4, c(NUM) + _t + R + c(TENUE) + " tok/s" + R))
+if cache is not None and tps is None:
+    # Releva al ritmo, no lo acompaña: el diseño da un hueco de velocidad en la
+    # banda, y mientras el modelo habla lo ocupa el tok/s.
     _t = "%d%%" % round(cache * 100)
-    b1.append(seg(4, c(NUM) + _t + R + c(TENUE) + " caché" + R))
+    b1.append(seg(5, c(NUM) + _t + R + c(TENUE) + " caché" + R))
+if permisos:
+    # El CLI ya pinta su propio pie de "bypass permissions"; esto es un distintivo
+    # en la banda, no una copia de aquella linea, que no es nuestra.
+    _pc = c(MAL) if permisos == "bypass" else c(MODO)
+    b1.append(seg(3, _pc + B + permisos + R, color=_pc + B, plain=permisos))
 if vim:
     vc = c(MODO) if vim == "INSERT" else c(TENUE)
-    b1.append(seg(5, vc + B + str(vim) + R, color=vc + B, plain=str(vim)))
+    b1.append(seg(6, vc + B + str(vim) + R, color=vc + B, plain=str(vim)))
 
 # ---------------------------------------------------------------------------
 # BANDA 2 · TRABAJO
@@ -299,12 +407,17 @@ if coste is not None:
 # ---------------------------------------------------------------------------
 # BANDA 3 · CUOTA
 # ---------------------------------------------------------------------------
-b3 = [seg(1, c(DIR) + dircorto + R, color=c(DIR), plain=dircorto)]
+_dirtxt = (c(DIRT) + dirpre + R if dirpre else "") + c(DIR) + dircola + R
+b3 = [seg(1, _dirtxt, color=c(DIR), plain=dircorto)]
+_primera = True
 for _v, _et in ((rl5, "5h"), (rl7, "7d")):
     if _v is None:
         continue
+    # La primera barra va detras del separador; la de 7d, pegada a la de 5h.
     b3.append(seg(2, c(TENUE) + _et + " " + R + barra(_v, 10, CUOTA, VACIO) +
-                     c(TENUE) + " %d%%" % round(_v) + R, sep="  "))
+                     c(TENUE) + " %d%%" % round(_v) + R,
+                  sep=SEPX if _primera else "  "))
+    _primera = False
 _dur = duracion(durms)
 if _dur:
     b3.append(seg(3, c(TENUE) + _dur + R, color=c(TENUE), plain=_dur))
@@ -318,7 +431,7 @@ tarjeta = None
 bocadillo = None
 if BICHO:
     uso = BI.uso_ponderado(pct, rl5, rl7)
-    E = BI.estado_de(uso)
+    E = BI.estado_de(uso, ctx=pct)
     etq = E[1]
 
     pet = BI.leer_pet()
@@ -333,75 +446,58 @@ if BICHO:
     paso = int(time.time())
     filas = BI.dibujar(criatura, E, paso=paso, hambre=hambre, veinticuatro=_TRUE)
 
-    # Al cruzar un umbral la etiqueta sale en negrita un refresco. Hace falta
-    # recordar el estado anterior, y se guarda en un fichero por sesion.
-    salta = False
-    _sid = d.get("session_id")
-    if _sid and re.match(r"^[A-Za-z0-9_-]{1,64}$", str(_sid)):
-        _tmp = os.environ.get("TMPDIR", "/tmp")
-        _f = os.path.join(_tmp, "claude-statusline-" + str(_sid))
-        # El fichero de sesion guarda la etiqueta anterior y, de paso, los hechos
-        # que solo la statusline ve: el pico de uso, cuando empezo y en que repo.
-        # Un hook de SessionEnd los convierte en contadores de comportamiento.
-        _antes = None
-        _hechos = {}
+    # Al cruzar un umbral la etiqueta sale en negrita un refresco: para eso hace
+    # falta el estado anterior, que ya viene leido de arriba.
+    salta = _antes is not None and _antes != etq
+    _pico = max(_pico_ant, uso)
+    _cambia = (_antes != etq or _pico >= _pico_ant + 1.0 or _turno_nuevo
+               or (api_ms is not None and api_ms != _api_ant))
+    if _f and _cambia:
+        # Cosas que hay que cobrarle al bicho y que ningun hook puede ver, porque
+        # los hooks no reciben ni el uso de contexto ni el modo de permisos.
+        _pet_cambia = False
+        _p2 = None
         try:
-            with open(_f) as _fh:
-                _crudo = _fh.read().strip()
-            if _crudo.startswith("{"):
-                _hechos = json.loads(_crudo)
-                if not isinstance(_hechos, dict):
-                    _hechos = {}
-                _e = _hechos.get("etq")
-                _antes = _e if isinstance(_e, str) else None
-            else:
-                _antes = _crudo or None
+            if etq == "k.o." and _antes is not None and _antes != "k.o.":
+                _p2 = BI.leer_pet()
+                _p2, _ok = BI.alimentar(_p2, "reventon")
+                if _ok:
+                    BI.contar(_p2, "impulsivo")
+                    BI.contar(_p2, "ctx_limite")
+                    # sesiones_ctx100 NO se toca aqui: lo cuenta `pet sesion` al
+                    # cerrar, que es una vez por sesion.
+                    _p2["contadores"]["racha_tests"] = 0
+                    _p2["contadores"]["racha_diffs"] = 0
+                    _pet_cambia = True
+            if _turno_nuevo and permisos == "bypass":
+                _p2 = _p2 or BI.leer_pet()
+                BI.contar(_p2, "turnos_bypass")
+                _pet_cambia = True
+            if _pet_cambia and _p2 is not None:
+                BI.escribir_pet(_p2)
         except Exception:
-            _hechos = {}
-        # Este fichero es de /tmp: lo puede tocar cualquiera y una escritura
-        # interrumpida lo deja a medias. Sus campos se tratan como sospechosos.
-        _pico_ant = num(_hechos.get("pico")) or 0.0
-        _t0 = num(_hechos.get("t0"))
-        _pico = max(_pico_ant, uso)
-        _sube_pico = _pico >= _pico_ant + 1.0
-        salta = _antes is not None and _antes != etq
-        # Solo se escribe cuando cambia: esto corre en cada refresco.
-        if _antes != etq or _sube_pico:
-            # El reventon del contexto no lo puede ver ningun hook —- los hooks
-            # no reciben el uso— asi que se cobra aqui, y solo en el cruce a
-            # k.o., que pasa una vez por sesion como mucho.
-            if etq == "k.o." and _antes is not None:
-                try:
-                    _p2 = BI.leer_pet()
-                    _p2, _ok = BI.alimentar(_p2, "reventon")
-                    if _ok:
-                        BI.contar(_p2, "impulsivo")
-                        BI.contar(_p2, "ctx_limite")
-                        # sesiones_ctx100 NO se toca aqui: lo cuenta `pet sesion`
-                        # al cerrar, que es una vez por sesion. Contarlo en los
-                        # dos sitios hacia alcanzable el kraken en dos sesiones.
-                        _p2["contadores"]["racha_tests"] = 0
-                        _p2["contadores"]["racha_diffs"] = 0
-                        BI.escribir_pet(_p2)
-                except Exception:
-                    pass
-            try:
-                with open(_f, "w") as _fh:
-                    json.dump({"etq": etq, "pico": round(_pico, 1),
-                               "t0": int(_t0) if _t0 and _t0 > 1e9 else int(time.time()),
-                               "repo": repo or ""}, _fh)
-            except Exception:
-                pass
-            # De paso, barrer los huerfanos de sesiones muertas (mas de un dia).
-            try:
-                _limite = time.time() - 86400
-                for _n in os.listdir(_tmp):
-                    if _n.startswith("claude-statusline-"):   # incluye los -todos-
-                        _p = os.path.join(_tmp, _n)
-                        if os.path.getmtime(_p) < _limite:
-                            os.unlink(_p)
-            except Exception:
-                pass
+            pass
+        try:
+            with open(_f, "w") as _fh:
+                json.dump({"etq": etq, "pico": round(_pico, 1),
+                           "t0": int(_t0) if _t0 and _t0 > 1e9 else int(_ahora),
+                           "repo": repo or "",
+                           "pid": prompt_id or _hechos.get("pid"),
+                           "api": _api_t,
+                           "tps": round(tps, 2) if tps else None,
+                           "tps_t": _tps_t}, _fh)
+        except Exception:
+            pass
+        # De paso, barrer los huerfanos de sesiones muertas (mas de un dia).
+        try:
+            _limite = _ahora - 86400
+            for _n in os.listdir(_tmp):
+                if _n.startswith("claude-statusline-"):   # incluye los -todos-
+                    _p = os.path.join(_tmp, _n)
+                    if os.path.getmtime(_p) < _limite:
+                        os.unlink(_p)
+        except Exception:
+            pass
 
     COL = c(E[2])
     _e = etq + (" ✦" if E[8] else "")
@@ -427,30 +523,69 @@ if BICHO:
             bocadillo = "racha de %d días. no la rompas hoy" % pet["racha"]
 
 # ---------------------------------------------------------------------------
-# SALIDA
+# SALIDA — el pie, no una banda mas. Fondo un tono por encima del negro y una
+# raya fina arriba: pertenece a la ventana, no al hilo. Las tres bandas van en
+# la columna izquierda, contra la tarjeta del bicho, en seis filas.
+#
+#   fila 0   banda 1 · motor      etiqueta del estado
+#   fila 1   banda 2 · trabajo    marca de la evolucion
+#   fila 2   banda 3 · cuota      cuerpo
+#   fila 3                        cara
+#   fila 4                        cuerpo
+#   fila 5   bocadillo            patas
+#
+# La raya cuesta una fila. STATUSLINE_REGLA=0 la quita y deja seis.
 # ---------------------------------------------------------------------------
-linea1 = assemble(b1, WIDTH)
-izq = [assemble(b2, CW), assemble(b3, CW), "", "", "", ""]
-if bocadillo:
-    # A la izquierda del bicho y a la altura de la cara, con la comilla
-    # apuntando a quien habla.
-    _t = c(TENUE) + bocadillo + " " + c(RAYA) + "«" + R
-    if vis(_t) <= CW:
-        izq[3] = padl(_t, CW)
+def _on(var, defecto="1"):
+    return os.environ.get(var, defecto).lower() not in ("0", "off", "no")
 
-if tarjeta and all(vis(x) <= CW for x in izq):
+
+FONDO_ON = _on("STATUSLINE_FONDO")
+REGLA_ON = _on("STATUSLINE_REGLA")
+BG = c(FONDO, False) if FONDO_ON else ""
+# Un reset entero se lleva por delante el fondo del pie. Al pintar se cambia por
+# "quita la negrita, vuelve al color de texto de la terminal" y se reafirma el
+# fondo, que asi sobrevive incluso a la pastilla del modelo, que trae el suyo.
+_SUAVE = "\033[22;39m"
+
+
+def pinta(linea):
+    if not FONDO_ON:
+        return linea
+    hueco = " " * max(0, WIDTH - vis(linea))
+    return BG + linea.replace(R, _SUAVE + BG) + hueco + R
+
+
+salida = []
+if REGLA_ON:
+    salida.append(c(BORDE) + "─" * WIDTH + R)
+
+izq = None
+if tarjeta:
+    izq = [assemble(b1, CW), assemble(b2, CW), assemble(b3, CW), "", "", ""]
+    if bocadillo:
+        # Quien habla lo dice la cara, no una comilla: la fila de los ojos del
+        # propio bicho y la cola apuntando al texto.
+        _t = filas[2] + c(COLA) + "◗" + R + " " + c(TEXTO) + bocadillo + R
+        if vis(_t) <= CW:
+            izq[5] = _t
+    if any(vis(x) > CW for x in izq):
+        izq = None
+
+if izq is not None:
     # Claude Code recorta los espacios del principio de la linea: si la izquierda
     # va vacia, el sangrado desaparece y el bicho se cae al borde. Se ancla con un
     # braille en blanco (U+2800), que se pinta vacio pero no es un espacio.
-    print(linea1)
     for _l, _t in zip(izq, tarjeta):
         if not ANSI.sub("", _l).strip():
             _l = "⠀"
-        print(padr(_l, CW) + " " * BICHO_GAP + _t)
+        salida.append(padr(_l, CW) + " " * BICHO_GAP + _t)
 else:
-    print(linea1)
-    print(assemble(b2, WIDTH))
-    print(assemble(b3, WIDTH))
+    salida.append(assemble(b1, WIDTH))
+    salida.append(assemble(b2, WIDTH))
+    salida.append(assemble(b3, WIDTH))
+
+print("\n".join(pinta(l) for l in salida))
 PYEOF
 )
 exec python3 -S -c "$PY_SRC"

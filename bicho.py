@@ -243,7 +243,7 @@ def nuevo_pet():
     """Un bicho recien nacido. Funcion y no constante: si fuera un dict de modulo
     todos los pets compartirian sus contadores."""
     d = {k: (0 if t is _ENTERO else "") for k, t in CAMPOS.items()}
-    d.update({"secreta": None, "contadores": {}, "hoy": []})
+    d.update({"secreta": None, "contadores": {}, "hoy": [], "marcas_dia": {}})
     return d
 
 
@@ -285,6 +285,9 @@ def leer_pet(ruta=None):
                              if isinstance(k, str)}
     if isinstance(d.get("hoy"), list):
         pet["hoy"] = [e for e in d["hoy"] if isinstance(e, dict)][-40:]
+    if isinstance(d.get("marcas_dia"), dict):
+        pet["marcas_dia"] = {k: v for k, v in d["marcas_dia"].items()
+                             if isinstance(k, str) and isinstance(v, str)}
     return pet
 
 
@@ -441,8 +444,20 @@ def _aplastar(inf):
     return "".join("▀" if ch in _TUMBADO else ch for ch in inf)
 
 
-def estado_de(uso):
-    """El estado que corresponde a un uso de 0 a 100."""
+def estado_de(uso, ctx=None):
+    """El estado que corresponde a un uso de 0 a 100.
+
+    El k.o. tiene una puerta aparte: basta con que el CONTEXTO llegue al 100%,
+    sin esperar a que los tres consumos lo hagan a la vez. Es coherente con por
+    que la media pondera como pondera —el contexto es lo unico que te para de
+    verdad— y sin esto el sprite del k.o. no se veia nunca: con ctx, 5h y 7d al
+    100, 90 y 90 la media sale 95, o sea "ahogada".
+    """
+    try:
+        if ctx is not None and float(ctx) >= 100.0:
+            return ESTADOS[-1]
+    except (TypeError, ValueError):
+        pass
     uso = max(0.0, min(100.0, float(uso)))
     for e in ESTADOS:
         if uso <= e[0]:
@@ -468,9 +483,10 @@ def dibujar(criatura, est, paso=0, hambre=0, veinticuatro=True):
     if anda and paso % 7 == 3:
         ojos = ("_", "_")
 
-    # A 1 fps unas patas alternando sin parar en la esquina del ojo cansan:
-    # STATUSLINE_BICHO_CALMA=1 lo deja andando 4 segundos de cada 12.
-    if anda and os.environ.get("STATUSLINE_BICHO_CALMA", "").lower() in ("1", "on", "yes"):
+    # A 1 fps unas patas alternando sin parar en la esquina del ojo cansan, asi
+    # que por defecto anda 4 segundos de cada 12. STATUSLINE_BICHO_ANDA=1 lo
+    # devuelve al baile continuo del diseno.
+    if anda and os.environ.get("STATUSLINE_BICHO_ANDA", "").lower() not in ("1", "on", "yes"):
         anda = paso % 12 < 4
 
     ko = etq == "k.o."

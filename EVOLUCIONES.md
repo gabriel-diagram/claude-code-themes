@@ -102,61 +102,77 @@ andado.
 
 ## Qué alimenta cada contador
 
-Los hooks (`hooks/pet-hook.sh`) traducen lo que haces en contadores:
+Los hooks (`hooks/pet-hook.sh`) y la propia statusline traducen lo que haces en
+contadores. **Las 27 evoluciones son alcanzables**: los siete oficios, las
+catorce marcas y las dos secretas.
 
-| Contador | Se llena con |
-| --- | --- |
-| `metodico` | commits y `/compact` |
-| `inquisitivo` | tests y tareas del plan |
-| `impulsivo` | reventones de contexto |
-| `diffs`, `racha_diffs` | commits (la racha se rompe al reventar) |
-| `tests`, `racha_tests` | tests en verde (íd.) |
-| `planes`, `plan_entero` | `TodoWrite` — el segundo es el plan más largo cerrado del todo |
-| `commit_ancho` | el `N files changed` más alto de un commit |
-| `ctx_bajo`, `sesiones_bajo_40` | el pico de contexto de la sesión, al cerrarla |
-| `sesiones_cortas`, `sesiones_15min`, `sesiones_largas`, `sesiones_4h` | la duración de la sesión, al cerrarla |
-| `sesiones_ctx100`, `ctx_limite` | tocar el 100% de contexto |
-| `dias_mismo_repo` | días seguidos cerrando sesión en el mismo repo |
-
-Los datos de forma de sesión —pico de contexto, duración, repo— **solo los ve la
-statusline**, que los va dejando en su fichero temporal; el hook de `SessionEnd`
-los convierte en contadores y borra el fichero.
-
-## Lo que no se puede contar
-
-**Cinco de las catorce marcas no son alcanzables**, y no por falta de ganas:
-
-| Marca | Condición | Por qué no |
+| Contador | Se llena con | Quién lo ve |
 | --- | --- | --- |
-| `sabueso` | repro antes del fix, 10 veces | hay que saber que un comando *es* una reproducción del bug |
-| `oraculo` | 5 planes escritos antes de tocar código | hay que saber que el plan iba de ese código |
-| `jardinero` | docs y limpieza dos días seguidos | hay que saber que un commit *es* limpieza |
-| `francotirador` | 8 tareas cerradas con una sola herramienta | hay que atribuir herramientas a una tarea |
-| `gremlin` | 30 turnos con permisos en bypass | el modo de permisos no llega al hook |
+| `metodico` | commits y `/compact` | hook |
+| `inquisitivo` | tests y tareas del plan | hook |
+| `impulsivo`, `ctx_limite` | reventones de contexto | statusline |
+| `diffs`, `racha_diffs` | commits (la racha se rompe al reventar) | hook |
+| `tests`, `racha_tests` | tests en verde (íd.) | hook |
+| `commit_ancho` | el `N files changed` más alto | hook |
+| `plan_entero` | el plan más largo cerrado del todo | hook |
+| `planes_antes_codigo` | un plan de 3+ tareas escrito antes de editar nada | hook |
+| `tarea_una_herramienta` | tareas cerradas usando una sola herramienta | hook |
+| `repro_antes_fix` | un test rojo seguido de uno verde | hook |
+| `dias_docs` | días seguidos con un commit de docs o de limpieza | hook + `git show --numstat` |
+| `turnos_bypass` | prompts nuevos con los permisos en bypass | statusline + transcript |
+| `ctx_bajo`, `sesiones_bajo_40` | el pico de contexto de la sesión | statusline → `SessionEnd` |
+| `sesiones_cortas`, `sesiones_15min`, `sesiones_largas`, `sesiones_4h` | la duración de la sesión | íd. |
+| `sesiones_ctx100` | tocar el 100% de contexto | íd. |
+| `dias_mismo_repo` | días seguidos cerrando sesión en el mismo repo | íd. |
 
-Las cuatro primeras piden entender la **intención** de lo que haces, no contar
-eventos. Un hook ve comandos y salidas; eso no basta. Están cableadas en
-`bicho.py` por si algún día llega el dato — su contador existe y se queda a 0.
+Tres datos **solo los ve la statusline**, porque no llegan a ningún hook: el uso
+de contexto, el modo de permisos y el ritmo de tokens. Los va dejando en su
+fichero temporal y el hook de `SessionEnd` los convierte en contadores.
 
-Las otras nueve sí salen, y los siete oficios también.
+El **modo de permisos** merece una nota: no viene en el payload de la statusline,
+pero sí en el transcript, cuya ruta sí llega. Se lee la cola del fichero (32 KB,
+0,02 ms) buscando el último `permissionMode`. Es la única forma de que `gremlin`
+—«30 turnos con permisos en bypass»— sea alcanzable.
 
-## Heurísticas, y lo que fallan
+## Cómo se deducen las cosas que el CLI no dice
 
-Dos de las comidas son **adivinanzas sobre texto**, no hechos:
+Dos comidas y cuatro marcas salen de **deducir**, no de un dato que el CLI
+exponga. La regla al escribirlas ha sido siempre la misma: **preferir perderse
+una comida a inventarse una.**
 
-- **«commit hecho»** pide que `git … commit` esté al **principio del comando** o
-  justo detrás de un operador de shell (`;`, `&&`, `|`, `(`). Sin ese anclaje, un
-  `grep -rn "git commit"` contaba como commit. Además la salida no puede decir
-  `nothing to commit`. Es la más fiable de las dos, y aun así es texto.
-- **«tests en verde»** pide que el comando mencione un runner conocido y que la
-  salida tenga una marca de verde (`^ok `, `passed`, `PASS`, `0 failures`…) y
-  ninguna de rojo. Un runner exótico no cuenta; un test llamado
-  `test_login_failed` puede contar como rojo.
+**Tests en verde.** Tres capas, de más dura a más blanda:
 
-Los dos patrones están arriba del todo en `hooks/pet-hook.sh` y se tocan sin
-miedo. **Cualquier heurística sobre texto tiene falsos positivos**: la regla al
-escribirlas ha sido preferir perderse una comida a inventarse una. No hay forma
-de hacerlo exacto mientras el CLI no exponga el resultado de la herramienta.
+1. Un `is_error` del CLI manda sobre todo: equivale al código de salida y es el
+   único dato duro que hay.
+2. Los patrones de rojo se buscan **solo en las últimas doce líneas**, que es
+   donde va el resumen. Buscarlos en toda la salida hacía que un test llamado
+   `test_login_failed` tiñera de rojo una suite verde.
+3. No hace falta un patrón de verde. Si el comando era un runner y salió bien,
+   cuenta — así entran los runners que no están en la lista.
+
+Para reconocer el runner hay una lista larga (pytest, jest, vitest, go, cargo,
+phpunit, rspec, mvn, gradle, dotnet, swift, flutter, mix, make/just/task…), un
+último recurso por el **nombre del ejecutable** (`run-tests.sh`, `testear.sh`,
+`bin/spec` cuentan; el `test` de shell no, que es una comparación de ficheros), y
+`PET_TEST_RUNNERS` para meter un regex propio.
+
+**Commit hecho.** `git … commit` tiene que estar al principio del comando o
+detrás de un operador de shell. Sin ese anclaje, un `grep -rn "git commit"`
+contaba como commit.
+
+**Las cuatro marcas deducidas.** Ninguna adivina intenciones: todas miran un
+hecho comprobable que se le parece mucho.
+
+| Marca | Lo que pide el diseño | Lo que se mira de verdad |
+| --- | --- | --- |
+| `sabueso` | repro antes del fix | un test rojo seguido de uno verde en la misma sesión |
+| `oraculo` | planes escritos antes de tocar código | un `TodoWrite` de 3+ tareas antes del primer `Edit`/`Write` |
+| `jardinero` | docs y limpieza dos días seguidos | `git show --numstat` del commit: mayoría de `.md`/`docs/`, o un borrado grande |
+| `francotirador` | tareas cerradas con una sola herramienta | herramientas distintas usadas entre dos tareas cerradas |
+
+Son aproximaciones y se equivocan: un rojo por un fallo de red y un verde después
+cuentan como repro→fix aunque no arreglaras nada. Pero se equivocan **por lo
+bajo** casi siempre, y ninguna se inventa un hecho que no haya ocurrido.
 
 ## Los mandos
 

@@ -79,28 +79,56 @@ sigue funcionando — sin bicho.
 
 ## La statusline en detalle
 
-Tres bandas a la izquierda y el bicho anclado a la derecha. Cada banda agrupa
-datos que se miran juntos, y suelta los elementos de menor prioridad antes que
-hacer *wrap* (que descuadra la caja del prompt):
+Es un **pie**, no una banda más: fondo un tono por encima del negro y una raya
+fina arriba, para que se lea como parte de la ventana y no como una línea más
+del hilo. Tres bandas a la izquierda y el bicho anclado a la derecha. Cada banda
+agrupa datos que se miran juntos, y suelta los elementos de menor prioridad
+antes que hacer *wrap* (que descuadra la caja del prompt):
 
 ```
- Opus 5  ██████░░░░░░░░░░ 36% · 1M ctx │ xhigh │ 98% caché
-projects/claude-code-themes (main ✳) │ +184/−37 │ $28.29        vibrante
-~/projects/claude-code-themes  5h ████░░░░░░ 41%  7d █░░░ 13%     ╲   ╱
-                                                                 ▗█████▖
-                                                                ▐█ > < █▌
-                                                                 ▝█████▘
-                                                                  ▘   ▝
+──────────────────────────────────────────────────────────────────────────────
+ Opus 5  ██████░░░░░░░░░░ 36% · 1M ctx │ xhigh │ 42.7 tok/s │ bypass   vibrante
+rochas/api (fix-errors ✳) │ +184/−37 │ $28.29                          |   |
+~/srv/rochas/api │ 5h ████░░░░░░ 41%  7d █░░░░░░░░░ 13% │ 1h 12m      ▗█┼█┼█▖
+                                                                     ▐█ > < █▌
+                                                                      ▝█┼█┼█▘
+▐█ > < █▌◗ racha de 5 días. no la rompas hoy                          ▝▝   ▘▘
 ```
 
-- **Banda 1 · motor** — modelo, contexto, razonamiento y caché: lo que cambia
-  cada turno. Va sola en la primera fila, que es donde Claude Code alinea sus
-  propios badges a la derecha.
+- **Banda 1 · motor** — modelo, contexto, razonamiento y ritmo: lo que cambia
+  cada turno.
 - **Banda 2 · trabajo** — repo, rama, diff y coste: lo que se lleva a un commit.
-- **Banda 3 · cuota** — directorio, límites 5h/7d y tiempo: se lee de reojo, va
-  en gris.
+  El nombre del repo lo da `workspace.repo` del payload (`owner/nombre`) cuando
+  hay remoto; sin remoto se queda el nombre a secas, porque la carpeta de al lado
+  no es un owner.
+#### Ritmo y permisos
 
-Por debajo de 55 columnas el bicho desaparece y quedan las tres bandas solas.
+El **`tok/s`** es real, no una estimación, pero hay que mirar bien de dónde sale.
+Los dos campos del payload **no miden lo mismo**: `total_output_tokens` es lo que
+sacó la *última* respuesta (se reinicia en cada turno, no es un contador que
+sube), mientras que `total_api_duration_ms` es el tiempo de API *acumulado* de la
+sesión. El ritmo de la última respuesta es lo primero entre lo que ha crecido lo
+segundo. Restar dos `total_output_tokens` seguidos no mide nada: son dos
+respuestas distintas, y el resultado sale inflado o negativo según cuál fuera más
+larga. Se apaga solo a los dos minutos sin moverse — cuando el modelo ya no está
+hablando — y entonces el acierto de caché ocupa ese hueco. Nunca salen los dos.
+
+El **modo de permisos** (`bypass`, `auto-edit`, `plan`) no viene en el payload,
+pero sí en el transcript, cuya ruta sí llega. Se lee solo la cola del fichero
+(0,02 ms) y sale como distintivo en la banda. No es una copia del pie que pinta
+el propio Claude Code: aquello es suyo y no se puede tocar.
+
+- **Banda 3 · cuota** — directorio, límites 5h/7d y tiempo: se lee de reojo, va
+  en gris. El `~/` va más apagado que el resto de la ruta (y se va con ella si
+  la ruta se recorta a sus tres últimos tramos: fingirlo daría a entender que
+  cuelgan de tu casa cuando pueden colgar de tres carpetas más).
+- **El bocadillo** cierra el pie. Quien habla lo dice la cara del propio bicho,
+  con la cola apuntando al texto; sale solo cuando hay algo que decir y solo a
+  partir de 100 columnas.
+
+Las tres bandas van dentro de la columna izquierda, contra la tarjeta del bicho:
+seis filas en total, más la raya. Por debajo de 55 columnas el bicho desaparece y
+quedan las tres bandas solas.
 
 ### El bicho
 
@@ -139,8 +167,9 @@ parpadeo (`_ _`) es un solo frame cada siete refrescos. Al cruzar un umbral la
 etiqueta sale en negrita un refresco — para eso guarda el estado anterior en
 `$TMPDIR/claude-statusline-<session_id>`.
 
-A 1 fps, unas patas alternando sin parar en la esquina del ojo pueden cansar:
-`STATUSLINE_BICHO_CALMA=1` lo deja andando solo cuatro segundos de cada doce.
+A 1 fps, unas patas alternando sin parar en la esquina del ojo cansan, así que
+**por defecto anda cuatro segundos de cada doce**. `STATUSLINE_BICHO_ANDA=1`
+devuelve el baile continuo del diseño.
 
 ### Evoluciones
 
@@ -183,8 +212,11 @@ hace falta el 100% clavado.
 | Variable | Efecto |
 | --- | --- |
 | `STATUSLINE_BICHO=0` | apaga el bicho, deja las tres bandas |
-| `STATUSLINE_BICHO_CALMA=1` | anda a ratos en vez de en cada refresco |
+| `STATUSLINE_BICHO_ANDA=1` | anda en cada refresco en vez de a ratos |
+| `STATUSLINE_FONDO=0` | quita el fondo del pie, deja las líneas transparentes |
+| `STATUSLINE_REGLA=0` | quita la raya de arriba y ahorra una fila |
 | `STATUSLINE_RIGHT_PAD` | margen derecho, por defecto `6` (ver abajo) |
+| `PET_TEST_RUNNERS` | regex extra para reconocer tu runner de tests |
 
 **Sobre los espacios de la izquierda.** Claude Code **recorta los espacios del
 principio** de cada línea de la statusline. Las filas cuya mitad izquierda va
