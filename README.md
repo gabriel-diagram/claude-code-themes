@@ -72,30 +72,51 @@ La statusline solo necesita `python3` (usa la librería estándar; nada de `jq`)
 
 ## La statusline en detalle
 
-Tres líneas que truncan al ancho real de la terminal y sueltan elementos de menor
-prioridad antes que hacer *wrap* (que descuadra la caja del prompt):
+Las líneas truncan al ancho real de la terminal y sueltan elementos de menor
+prioridad antes que hacer *wrap* (que descuadra la caja del prompt).
 
-- **L1** — `▍modelo · estilo · dir (rama✷) · VIM`
-- **L2** — `[barra de contexto] % · $coste · +/− líneas · effort · límites 5h/7d`
-- **L3** — *el bicho* + la **mascota** anclada a la derecha de L2/L3: una carita + barra de vida que refleja el **estado real**
-  de la sesión. La "vida" es `100 − peor cuello` entre contexto, límite de 5h y
-  límite de 7d, con curva cuadrática (el margen no "duele" hasta acercarse al
-  tope). No finge emociones: si un límite llega al 100%, el bicho hace k.o. y te
-  dice qué lo mató.
+En terminal ancha (≥62 columnas) son **cinco filas**: los datos a la izquierda y
+la **tarjeta del bicho** anclada a la derecha de las filas 2 a 5.
+
+```
+▍Opus 5 (1M context) │ default │ projects/claude-code-themes (main✷)
+█░░░░░░░░░░░░░░░ 6% │ $1.61 │ +0/-0                          ✦ fresca
+xhigh │ 5h 22% 7d 11%                                        ▐ >  < ▌
+                                                              ▀▀  ▀▀
+                                                             ▰▰▰▰▰▰
+```
+
+- **fila 1** — `▍modelo · estilo · dir (rama✷) · VIM`
+- **fila 2** — `[barra de contexto] % · $coste · +/− líneas`
+- **fila 3** — `effort · límites 5h/7d`
+- **fila 4** — el cuello, solo cuando aprieta: `cuello: ctx`, o qué te mató
+- **derecha** — la tarjeta: estado, sprite y barra de vida
+
+*El bicho* refleja el **estado real** de la sesión. La "vida" es `100 − peor
+cuello` entre contexto, límite de 5h y límite de 7d, con curva cuadrática (el
+margen no "duele" hasta acercarse al tope). No finge emociones: si un límite
+llega al 100%, el bicho hace k.o. y te dice qué lo mató.
+
+Por debajo de 62 columnas la tarjeta desaparece y se vuelve al diseño compacto de
+**tres filas**, con los datos en una sola línea y la carita en línea: `✦ ◕▿◕
+▰▰▰▰▰▰ fresca`.
 
 ### La mascota
 
-A la derecha de las líneas 2 y 3 se dibuja el bicho de Claude en pixel-art: dos
-filas de texto que dan tres de píxel usando medios bloques. El cuerpo se pinta
-con **color de fondo** y los ojos negros van encima, para que salga la silueta
-sólida del logo y no un montón de bloques sueltos.
+La tarjeta son cuatro filas de 8 celdas, centradas al ancho del sprite:
 
 ```
- ... │ xhigh │ 5h 22% 7d 11%      ▐ >  < ▌
- ✦ ◕▿◕ ▰▰▰▰▰▰ fresca               ▀▀  ▀▀
+✦ fresca     <- estado
+▐ >  < ▌     <- sprite: orejas, cuerpo y ojos
+ ▀▀  ▀▀      <- patas
+▰▰▰▰▰▰       <- barra de vida
 ```
 
-Los ojos siguen el mismo estado que la cara y la barra de vida:
+El bicho va en pixel-art: dos filas de texto que dan tres de píxel usando medios
+bloques. El cuerpo se pinta con **color de fondo** y los ojos negros van encima,
+para que salga la silueta sólida del logo y no un montón de bloques sueltos.
+
+Los ojos siguen el mismo estado que la etiqueta y la barra de vida:
 
 | Vida | Ojos | |
 | --- | --- | --- |
@@ -106,9 +127,9 @@ Los ojos siguen el mismo estado que la cara y la barra de vida:
 | <20 | `×` `×` | agonizando, cuerpo en rojo |
 | k.o. | `✖` `✖` | tumbado, sin patas, en gris |
 
-**Por qué la L1 se queda libre:** Claude Code pinta sus propios badges alineados
-a la derecha de la primera fila de la statusline. La mascota ocupa L2/L3 para no
-chocar con ellos.
+**Por qué la fila 1 se queda libre:** Claude Code pinta sus propios badges
+alineados a la derecha de la primera fila de la statusline. La tarjeta arranca en
+la fila 2 para no chocar con ellos.
 
 **Animación.** El techo real son **1 fps**: la statusline se re-ejecuta por
 eventos (con *debounce* de 300 ms) y en reposo solo si defines `refreshInterval`,
@@ -125,8 +146,9 @@ de frame cuando algo la re-dibuja.
 | `STATUSLINE_MASCOT_COLOR` | `#rrggbb` o índice 0-255; por defecto `#2e8bff` en local y el coral `#da7756` del logo en docker |
 | `STATUSLINE_MASCOT_WALK=1` | anda sin parar |
 
-Se oculta sola si la terminal baja de 62 columnas, y el resto de la línea se
-ensambla sobre el ancho ya descontado, así que nunca empuja contenido fuera.
+Se oculta sola si la terminal baja de 62 columnas, y las líneas de datos se
+ensamblan sobre el ancho ya descontado, así que la tarjeta nunca empuja contenido
+fuera.
 
 El color usa **24 bits si hay `COLORTERM`**, y si no cae al 256 más cercano. Ojo:
 Windows Terminal / WSL no exportan `COLORTERM` por defecto — sin él tanto la

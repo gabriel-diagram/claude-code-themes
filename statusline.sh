@@ -204,13 +204,15 @@ if cost_usd is not None:
     s2.append(seg(3, GRAY+"$"+format(float(cost_usd),".2f")+R, color=GRAY, plain="$"+format(float(cost_usd),".2f")))
 if added is not None or removed is not None:
     s2.append(seg(1, GREEN+"+"+str(added or 0)+R+SC+"/"+R+PINK+"-"+str(removed or 0)+R))
+s2b=[]
 if effort:
-    s2.append(seg(2, VIOLET+str(effort)+R, color=VIOLET, plain=str(effort)))
+    s2b.append(seg(2, VIOLET+str(effort)+R, color=VIOLET, plain=str(effort)))
 rl=[]
 if rl5 is not None: rl.append(GRAY+"5h "+R+lvl(rl5)+str(int(round(float(rl5))))+"%"+R)
 if rl7 is not None: rl.append(GRAY+"7d "+R+lvl(rl7)+str(int(round(float(rl7))))+"%"+R)
-if rl: s2.append(seg(4, " ".join(rl)))
-line2=assemble(s2, CW)
+if rl: s2b.append(seg(4, " ".join(rl)))
+s2a=s2                      # con tarjeta: fila 2 = contexto/coste, fila 3 = effort/limites
+s2=s2+s2b                   # sin tarjeta: todo junto en una sola fila, como antes
 
 # --- L3: el bicho — cara del estado REAL de sesion (vida = 100 - peor cuello) --------
 # Honesto: no finge emociones; refleja el cuello mas apretado (ctx / rate 5h / 7d).
@@ -241,16 +243,31 @@ else:
 vida=max(0,min(100,vida))
 cara,clbl,col=face(vida)
 glow=(GRAY+"✦ "+R) if vida>=95 else ""    # destello solo al nacer
-line3=glow+col+B+cara+R+" "+lifebar(vida,col)+" "+col+clbl+R
-if vida<=0:
-    line3+=SC+" │ "+R+GRAY+peor[1]+" 100%"+R     # qué me mató
-elif vida<40:
-    line3+=SC+" │ "+R+GRAY+"cuello "+peor[1]+R    # qué aprieta
+# qué aprieta / qué me mató: sale a la izquierda, no dentro de la tarjeta
+if   vida<=0: cuello=GRAY+"\u2716 "+peor[1]+" al 100%"+R
+elif vida<40: cuello=GRAY+"cuello: "+peor[1]+R
+else:         cuello=""
 
-if MASCOT and vis(line2)<=CW and vis(line3)<=CW:
+# --- LA TARJETA: estado arriba, sprite en medio, barra de vida abajo ----------------
+# 4 filas de 8 celdas ancladas a la derecha de las filas 2-5. La 1 no, que ahi Claude
+# Code alinea sus badges. Se centra todo al ancho del sprite.
+def ctr(plain, colored, w=MASCOT_W):
+    n=w-len(plain)
+    if n<0: return colored
+    return " "*(n//2)+colored+" "*(n-n//2)
+
+izq=[assemble(s2a, CW), assemble(s2b, CW), cuello, ""]
+if MASCOT and all(vis(x)<=CW for x in izq):
+    etq=("\u2726 "+clbl) if vida>=95 else clbl       # el destello cabe justo en 8
     _t,_b=mascot(vida)
-    line2=padr(line2,CW)+" "*MASCOT_GAP+_t
-    line3=padr(line3,CW)+" "*MASCOT_GAP+_b
-
-print(line1); print(line2); print(line3)
+    tarjeta=[ctr(etq, col+B+etq+R), _t, _b, ctr("\u25b0"*6, lifebar(vida,col))]
+    print(line1)
+    for _l,_c in zip(izq,tarjeta):
+        print(padr(_l,CW)+" "*MASCOT_GAP+_c)
+else:                                            # terminal estrecha: el diseño de 3 filas
+    line2=assemble(s2, WIDTH)
+    line3=glow+col+B+cara+R+" "+lifebar(vida,col)+" "+col+clbl+R
+    if vida<=0:   line3+=SC+" \u2502 "+R+GRAY+peor[1]+" 100%"+R
+    elif vida<40: line3+=SC+" \u2502 "+R+GRAY+"cuello "+peor[1]+R
+    print(line1); print(line2); print(line3)
 '
