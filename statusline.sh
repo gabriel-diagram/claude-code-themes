@@ -8,7 +8,7 @@
 #  L1: ▍modelo · estilo · dir (rama✷) · VIM     L2: [barra ctx] % · $coste · +/- líneas · effort · 5h/7d
 #  L3: el bicho — cara + barra de vida del estado real de sesión (vida = peor cuello: ctx / 5h / 7d)
 python3 -c '
-import sys, json, os, re, subprocess
+import sys, json, os, re, subprocess, time
 try:
     d = json.load(sys.stdin)
 except Exception:
@@ -67,6 +67,13 @@ def term_width():
     return 80
 WIDTH=max(20, term_width()-1)
 
+# --- MASCOTA: reserva de hueco a la derecha de L2/L3 --------------------------------
+# La L1 NO se toca: ahi Claude Code pinta sus badges alineados a la derecha.
+MASCOT_W=8; MASCOT_GAP=2
+MASCOT=(os.environ.get("STATUSLINE_MASCOT","1").lower() not in ("0","off","no")
+        and WIDTH>=62)
+CW=WIDTH-(MASCOT_W+MASCOT_GAP) if MASCOT else WIDTH
+
 # --- ensamblado adaptativo ----------------------------------------------------------
 # seg = {p:prioridad_caida(mayor cae antes), txt:con_ansi, vis:ancho, sep:" "|SEP_espaciado,
 #        color:prefijo_para_truncar|None, plain:texto_plano|None}
@@ -122,6 +129,56 @@ try:
 except Exception:
     pass
 
+# --- MASCOTA: el bicho de Claude ----------------------------------------------------
+# 2 filas de texto = 3 de pixel (medios bloques). El cuerpo se pinta con FONDO de color
+# y los ojos negros encima, para que salga la silueta solida del logo y no bloques
+# sueltos. Color = acento del tema (azul electrico en local, coral del logo en docker);
+# STATUSLINE_MASCOT_COLOR=<0-255> lo fuerza, STATUSLINE_MASCOT=0 lo apaga.
+# Color: se clava el acento del tema (#2e8bff Electric Blue) si hay truecolor; si no,
+# cae al 256 mas cercano. STATUSLINE_MASCOT_COLOR acepta "#rrggbb" o un indice 0-255.
+_TRUE=os.environ.get("COLORTERM","").lower() in ("truecolor","24bit")
+def _c(spec, fg=True):
+    lead=38 if fg else 48
+    if isinstance(spec,tuple):
+        if _TRUE: return "\033[%d;2;%d;%d;%dm"%((lead,)+spec[0])
+        return "\033[%d;5;%dm"%(lead,spec[1])
+    return "\033[%d;5;%dm"%(lead,spec)
+# (rgb, fallback256)
+CORAL =((0xda,0x77,0x56),173)   # coral del logo  -> perfil docker
+AZUL  =((0x2e,0x8b,0xff), 33)   # claude / Electric Blue -> perfil local
+ROJO  =((0xff,0x4b,0x3e),203)   # error del tema  -> agonizando
+GRIS  =((0x5a,0x5a,0x5a),240)   # k.o.
+_mc=os.environ.get("STATUSLINE_MASCOT_COLOR","").strip()
+if _mc.startswith("#") and len(_mc)==7:
+    try: ACC=((int(_mc[1:3],16),int(_mc[3:5],16),int(_mc[5:7],16)),33)
+    except ValueError: ACC=CORAL if DOCKER else AZUL
+elif _mc.isdigit(): ACC=int(_mc)
+else: ACC=CORAL if DOCKER else AZUL
+
+def mascot(v):
+    t=int(time.time())                      # 1 frame/s: es el techo real de la statusline
+    col=GRIS if v<=0 else (ROJO if v<20 else ACC)
+    if   v<=0:  e1,e2="\u2716","\u2716"           # k.o.
+    elif v>=80: e1,e2=">","<"               # los ojos del logo
+    elif v>=60: e1,e2="\u203a","\u2039"           # mas relajados
+    elif v>=40: e1,e2="-","-"               # entrecerrados
+    elif v>=20: e1,e2="~","~"               # fundido
+    else:       e1,e2="\u00d7","\u00d7"           # agonizando
+    if v>=40 and t%6==0: e1,e2="-","-"      # parpadeo: 1 de cada 6 frames
+    FGC=_c(col); BGC=_c(col,False); EYE="\033[38;5;16m"
+    top=FGC+"\u2590"+R+BGC+EYE+" "+e1+"  "+e2+" "+R+FGC+"\u258c"+R   # orejas + cuerpo + ojos
+    # Anda a ratos, no sin parar: 3 pasos cada 12 s. Un baile continuo en la esquina
+    # del ojo distrae mas que decora. STATUSLINE_MASCOT_WALK=1 lo pone a andar siempre.
+    _q=t%12; _paso=(_q<3) or os.environ.get("STATUSLINE_MASCOT_WALK","")=="1"
+    if   v<=0:  legs="  \u2580\u2580\u2580\u2580  "          # tumbado, sin patas
+    elif _paso: legs=" \u2588\u2588  \u2580\u2580 " if t%2 else " \u2580\u2580  \u2588\u2588 "
+    else:       legs=" \u2580\u2580  \u2580\u2580 "          # quieto, de pie
+    return top, FGC+legs+R                  # patas alternas = anda; planas = muerto
+
+def padr(s,w):
+    n=w-vis(s)
+    return s+(" "*n) if n>0 else s
+
 # --- L1: modelo · estilo · dir (rama) · vim -----------------------------------------
 s1=[seg(0, CYAN+B+"▍"+str(model)+R, color=CYAN+B, plain="▍"+str(model))]
 if style: s1.append(seg(3, VIOLET+str(style)+R, color=VIOLET, plain=str(style)))
@@ -153,7 +210,7 @@ rl=[]
 if rl5 is not None: rl.append(GRAY+"5h "+R+lvl(rl5)+str(int(round(float(rl5))))+"%"+R)
 if rl7 is not None: rl.append(GRAY+"7d "+R+lvl(rl7)+str(int(round(float(rl7))))+"%"+R)
 if rl: s2.append(seg(4, " ".join(rl)))
-line2=assemble(s2, WIDTH)
+line2=assemble(s2, CW)
 
 # --- L3: el bicho — cara del estado REAL de sesion (vida = 100 - peor cuello) --------
 # Honesto: no finge emociones; refleja el cuello mas apretado (ctx / rate 5h / 7d).
@@ -189,6 +246,11 @@ if vida<=0:
     line3+=SC+" │ "+R+GRAY+peor[1]+" 100%"+R     # qué me mató
 elif vida<40:
     line3+=SC+" │ "+R+GRAY+"cuello "+peor[1]+R    # qué aprieta
+
+if MASCOT and vis(line2)<=CW and vis(line3)<=CW:
+    _t,_b=mascot(vida)
+    line2=padr(line2,CW)+" "*MASCOT_GAP+_t
+    line3=padr(line3,CW)+" "*MASCOT_GAP+_b
 
 print(line1); print(line2); print(line3)
 '
