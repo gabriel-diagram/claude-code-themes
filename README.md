@@ -82,7 +82,7 @@ la **tarjeta del bicho** anclada a la derecha de las filas 2 a 6.
 ▍Opus 5 (1M context) │ default │ projects/claude-code-themes (main✷)
 ███████░░░░░░░░░ 45% │ $4.56 │ +0/-0                       vibrante
 xhigh │ 5h 28% 7d 12%                                     ██████████
-                                                        ██████████████
+                                                        ███ >    < ███
                                                           ██▀▀██▀▀██
                                                           ▰▰▰▰▰▰▰▰▰▱
 ```
@@ -109,24 +109,32 @@ La tarjeta son cinco filas de 14 celdas, todo centrado al ancho del sprite:
 ```
    vibrante     <- estado
   ██████████    <- cabeza
-██████████████  <- tronco, con las orejas saliendo 2 a cada lado
+███ >    < ███  <- tronco: orejas fuera y ojos recortados
   ██▀▀██▀▀██    <- las tres patas
   ▰▰▰▰▰▰▰▰▰▱    <- barra de vida
 ```
 
-El bicho es una silueta: 14×6 píxeles en tres filas de texto, con medios bloques
-para la resolución vertical. El cuerpo apoya en `▀` y cada pata baja a `█`, que es
-lo que deja el hueco entre patas.
+El bicho son 14×6 píxeles en tres filas de texto, con medios bloques para la
+resolución vertical. El cuerpo apoya en `▀` y cada pata baja a `█`, que es lo que
+deja el hueco entre patas. Los ojos son texto negro sobre el cuerpo pintado a
+**color de fondo**, así que salen recortados dentro de la silueta en vez de
+flotando al lado, que es como se leerían si fueran caracteres sueltos.
 
-**Sin ojos, a propósito.** A esta escala unos ojos de texto (`>` `<`) se leen como
-caracteres sueltos, no como parte del dibujo. El estado lo cuentan la etiqueta, la
-barra de vida y el color del cuerpo:
+**El cuerpo va del color del estado**, el mismo que la etiqueta y la barra: no
+tiene sentido un bicho azul brillante con la barra de vida en rojo. Cada estado
+tiene además su versión:
 
-| Vida | Cuerpo | Patas |
+| Vida | Ojos | Postura |
 | --- | --- | --- |
-| ≥20 | acento del tema | anda |
-| <20 | rojo (`error` del tema) | anda |
-| k.o. | gris | tumbado, sin patas |
+| ≥95 | `>` `<` | de pie, anda, con destello en la etiqueta |
+| ≥80 | `>` `<` | de pie, anda |
+| ≥60 | `•` `•` | de pie, anda |
+| ≥40 | `-` `-` | de pie, ya no anda |
+| ≥20 | `~` `~` | hundido (media cabeza), quieto |
+| <20 | `×` `×` | hundido, quieto |
+| k.o. | `✖` `✖` | tumbado: sin cabeza ni patas, y en gris |
+
+Parpadea de `>` `<` a `-` `-` un frame de cada seis, mientras le quede cuerda.
 
 **Por qué la fila 1 se queda libre:** Claude Code pinta sus propios badges
 alineados a la derecha de la primera fila de la statusline. La tarjeta arranca en
@@ -144,7 +152,7 @@ de frame cuando algo la re-dibuja.
 | Variable | Efecto |
 | --- | --- |
 | `STATUSLINE_MASCOT=0` | la apaga |
-| `STATUSLINE_MASCOT_COLOR` | `#rrggbb` o índice 0-255; por defecto `#2e8bff` en local y el coral `#da7756` del logo en docker |
+| `STATUSLINE_MASCOT_COLOR` | `#rrggbb` o índice 0-255: fija el cuerpo a un color y deja de seguir al estado |
 | `STATUSLINE_MASCOT_WALK=1` | anda sin parar |
 | `STATUSLINE_RIGHT_PAD` | margen derecho, por defecto `6` (ver abajo) |
 

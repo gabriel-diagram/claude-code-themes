@@ -158,24 +158,36 @@ if _mc.startswith("#") and len(_mc)==7:
     except ValueError: ACC=CORAL if DOCKER else AZUL
 elif _mc.isdigit(): ACC=int(_mc)
 else: ACC=CORAL if DOCKER else AZUL
+_forzado=bool(_mc)        # si lo fuerzas por env, manda el env y no el estado
+def _bgesc(e): return e.replace("[38;","[48;")   # el mismo color, pero de fondo
 
-def mascot(v):
-    # 14x6 pixeles en 3 filas de texto. Cuerpo de 10, orejas saliendo 2 a cada lado en
-    # la fila del medio, y 3 patas: el cuerpo apoya en \u2580 y cada pata baja a \u2588.
+def mascot(v, col):
+    # 14x6 pixeles en 3 filas de texto. El cuerpo va del COLOR DEL ESTADO, el mismo que
+    # la etiqueta y la barra, salvo k.o. (gris) o si lo fuerzas por env. Los ojos son
+    # texto negro sobre el cuerpo pintado a FONDO: asi salen recortados, como el logo.
     t=int(time.time())
-    FGC=_c(GRIS if v<=0 else (ROJO if v<20 else ACC))
-    cab="  "+"\u2588"*10+"  "           # cabeza
-    tro="\u2588"*14                     # tronco + orejas
-    if v<=0:
-        pat="  "+"\u2580"*10+"  "       # k.o.: tumbado, sin patas
-    else:
+    cue=_c(GRIS) if v<=0 else (_c(ACC) if _forzado else col)
+    BGC=_bgesc(cue); OJO="\033[38;5;16m"
+    if   v<=0:  o1,o2="\u2716","\u2716"     # k.o.
+    elif v>=80: o1,o2=">","<"         # los ojos del logo
+    elif v>=60: o1,o2="\u2022","\u2022"     # redondos
+    elif v>=40: o1,o2="-","-"         # entrecerrados
+    elif v>=20: o1,o2="~","~"         # fundido
+    else:       o1,o2="\u00d7","\u00d7"     # agonizando
+    if v>=60 and t%6==0: o1,o2="-","-"        # parpadeo: 1 de cada 6 frames
+    tro=BGC+OJO+"    "+o1+"    "+o2+"    "+R  # tronco: orejas fuera y ojos recortados
+    if v<=0:                                   # TUMBADO: se le cae la cabeza y las patas
+        return [" "*14, tro, cue+"\u2580"*14+R]
+    # HUNDIDO por debajo de 40: la cabeza pierde media altura, se le ve encogido
+    cab="  "+("\u2588" if v>=40 else "\u2584")*10+"  "
+    if v>=60:                                  # solo anda mientras le queda cuerda
         anda=(t%12<3) or os.environ.get("STATUSLINE_MASCOT_WALK","")=="1"
-        BAJA="\u2588"*2; SUBE="\u2580"*2; HUE="\u2580"*2
-        if not anda:  i,d=BAJA,BAJA      # quieto: las dos apoyadas
-        elif t%2:     i,d=SUBE,BAJA      # paso: alterna la de fuera
-        else:         i,d=BAJA,SUBE
-        pat="  "+i+HUE+BAJA+HUE+d+"  "
-    return [FGC+cab+R, FGC+tro+R, FGC+pat+R]
+        if   not anda: pat="  \u2588\u2588\u2580\u2580\u2588\u2588\u2580\u2580\u2588\u2588  "
+        elif t%2:      pat="  \u2580\u2580\u2580\u2580\u2588\u2588\u2580\u2580\u2588\u2588  "
+        else:          pat="  \u2588\u2588\u2580\u2580\u2588\u2588\u2580\u2580\u2580\u2580  "
+    else:                                      # QUIETO: cansado ya no anda
+        pat="  \u2588\u2588\u2580\u2580\u2588\u2588\u2580\u2580\u2588\u2588  "
+    return [cue+cab+R, tro, cue+pat+R]
 
 def padr(s,w):
     n=w-vis(s)
@@ -261,7 +273,7 @@ def ctr(plain, colored, w=MASCOT_W):
 izq=[assemble(s2a, CW), assemble(s2b, CW), cuello, "", ""]
 if MASCOT and all(vis(x)<=CW for x in izq):
     etq=("\u2726 "+clbl) if vida>=95 else clbl
-    tarjeta=[ctr(etq, col+B+etq+R)]+mascot(vida)+[ctr("\u25b0"*10, lifebar(vida,col,10))]
+    tarjeta=[ctr(etq, col+B+etq+R)]+mascot(vida,col)+[ctr("\u25b0"*10, lifebar(vida,col,10))]
     # Claude Code recorta los espacios del principio de la linea: si la izquierda va
     # vacia, el sangrado desaparece y la tarjeta se cae al borde izquierdo. Se ancla
     # con un braille en blanco (U+2800), que se pinta vacio pero no es un espacio.
