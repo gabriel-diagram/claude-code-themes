@@ -60,18 +60,22 @@ def term_width():
         if w: return int(w)
     except Exception: pass
     c=os.environ.get("COLUMNS")
-    if c and c.isdigit(): return int(c)
+    if c and c.isdigit() and int(c)>0: return int(c)
     try:
         return os.get_terminal_size(os.open("/dev/tty", os.O_RDONLY)).columns
     except Exception: pass
     return 80
-WIDTH=max(20, term_width()-1)
+# Claude Code recorta la linea unos 5 caracteres antes de COLUMNS; con menos margen
+# la parte derecha se trunca o hace wrap. STATUSLINE_RIGHT_PAD lo ajusta.
+try: _rp=max(1,int(os.environ.get("STATUSLINE_RIGHT_PAD","6")))
+except ValueError: _rp=6
+WIDTH=max(20, term_width()-_rp)
 
 # --- MASCOTA: reserva de hueco a la derecha de L2/L3 --------------------------------
 # La L1 NO se toca: ahi Claude Code pinta sus badges alineados a la derecha.
-MASCOT_W=8; MASCOT_GAP=2
+MASCOT_W=24; MASCOT_GAP=2
 MASCOT=(os.environ.get("STATUSLINE_MASCOT","1").lower() not in ("0","off","no")
-        and WIDTH>=62)
+        and WIDTH>=70)
 CW=WIDTH-(MASCOT_W+MASCOT_GAP) if MASCOT else WIDTH
 
 # --- ensamblado adaptativo ----------------------------------------------------------
@@ -156,24 +160,24 @@ elif _mc.isdigit(): ACC=int(_mc)
 else: ACC=CORAL if DOCKER else AZUL
 
 def mascot(v):
-    t=int(time.time())                      # 1 frame/s: es el techo real de la statusline
-    col=GRIS if v<=0 else (ROJO if v<20 else ACC)
-    if   v<=0:  e1,e2="\u2716","\u2716"           # k.o.
-    elif v>=80: e1,e2=">","<"               # los ojos del logo
-    elif v>=60: e1,e2="\u203a","\u2039"           # mas relajados
-    elif v>=40: e1,e2="-","-"               # entrecerrados
-    elif v>=20: e1,e2="~","~"               # fundido
-    else:       e1,e2="\u00d7","\u00d7"           # agonizando
-    if v>=40 and t%6==0: e1,e2="-","-"      # parpadeo: 1 de cada 6 frames
-    FGC=_c(col); BGC=_c(col,False); EYE="\033[38;5;16m"
-    top=FGC+"\u2590"+R+BGC+EYE+" "+e1+"  "+e2+" "+R+FGC+"\u258c"+R   # orejas + cuerpo + ojos
-    # Anda a ratos, no sin parar: 3 pasos cada 12 s. Un baile continuo en la esquina
-    # del ojo distrae mas que decora. STATUSLINE_MASCOT_WALK=1 lo pone a andar siempre.
-    _q=t%12; _paso=(_q<3) or os.environ.get("STATUSLINE_MASCOT_WALK","")=="1"
-    if   v<=0:  legs="  \u2580\u2580\u2580\u2580  "          # tumbado, sin patas
-    elif _paso: legs=" \u2588\u2588  \u2580\u2580 " if t%2 else " \u2580\u2580  \u2588\u2588 "
-    else:       legs=" \u2580\u2580  \u2580\u2580 "          # quieto, de pie
-    return top, FGC+legs+R                  # patas alternas = anda; planas = muerto
+    # 24x6 pixeles en 3 filas de texto. Cuerpo de 18 con las orejas saliendo en la
+    # fila del medio, y 3 patas abajo hechas con medio bloque (el cuerpo apoya en
+    # \u2580 y la pata baja a \u2588). Sin ojos: el estado lo dicen la etiqueta y la barra.
+    t=int(time.time())
+    FGC=_c(GRIS if v<=0 else (ROJO if v<20 else ACC))
+    cab="   "+"\u2588"*18+"   "          # cabeza (18 de cuerpo)
+    tro="\u2588"*24                      # tronco + orejas (sobresalen 3 a cada lado)
+    if v<=0:
+        pat="   "+"\u2580"*18+"   "      # k.o.: tumbado, sin patas
+    else:
+        _q=t%12
+        anda=(_q<3) or os.environ.get("STATUSLINE_MASCOT_WALK","")=="1"
+        BAJA="\u2588"*4; SUBE="\u2580"*4; HUE="\u2580"*3
+        if not anda:  i,d=BAJA,BAJA      # quieto: las dos apoyadas
+        elif t%2:     i,d=SUBE,BAJA      # paso: alterna la de fuera
+        else:         i,d=BAJA,SUBE
+        pat="   "+i+HUE+BAJA+HUE+d+"   "
+    return [FGC+cab+R, FGC+tro+R, FGC+pat+R]
 
 def padr(s,w):
     n=w-vis(s)
@@ -256,11 +260,10 @@ def ctr(plain, colored, w=MASCOT_W):
     if n<0: return colored
     return " "*(n//2)+colored+" "*(n-n//2)
 
-izq=[assemble(s2a, CW), assemble(s2b, CW), cuello, ""]
+izq=[assemble(s2a, CW), assemble(s2b, CW), cuello, "", ""]
 if MASCOT and all(vis(x)<=CW for x in izq):
-    etq=("\u2726 "+clbl) if vida>=95 else clbl       # el destello cabe justo en 8
-    _t,_b=mascot(vida)
-    tarjeta=[ctr(etq, col+B+etq+R), _t, _b, ctr("\u25b0"*6, lifebar(vida,col))]
+    etq=("\u2726 "+clbl) if vida>=95 else clbl
+    tarjeta=[ctr(etq, col+B+etq+R)]+mascot(vida)+[ctr("\u25b0"*14, lifebar(vida,col,14))]
     print(line1)
     for _l,_c in zip(izq,tarjeta):
         print(padr(_l,CW)+" "*MASCOT_GAP+_c)
