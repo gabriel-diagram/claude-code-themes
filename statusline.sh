@@ -73,9 +73,9 @@ WIDTH=max(20, term_width()-_rp)
 
 # --- MASCOTA: reserva de hueco a la derecha de L2/L3 --------------------------------
 # La L1 NO se toca: ahi Claude Code pinta sus badges alineados a la derecha.
-MASCOT_W=24; MASCOT_GAP=2
+MASCOT_W=14; MASCOT_GAP=2
 MASCOT=(os.environ.get("STATUSLINE_MASCOT","1").lower() not in ("0","off","no")
-        and WIDTH>=70)
+        and WIDTH>=60)
 CW=WIDTH-(MASCOT_W+MASCOT_GAP) if MASCOT else WIDTH
 
 # --- ensamblado adaptativo ----------------------------------------------------------
@@ -160,23 +160,21 @@ elif _mc.isdigit(): ACC=int(_mc)
 else: ACC=CORAL if DOCKER else AZUL
 
 def mascot(v):
-    # 24x6 pixeles en 3 filas de texto. Cuerpo de 18 con las orejas saliendo en la
-    # fila del medio, y 3 patas abajo hechas con medio bloque (el cuerpo apoya en
-    # \u2580 y la pata baja a \u2588). Sin ojos: el estado lo dicen la etiqueta y la barra.
+    # 14x6 pixeles en 3 filas de texto. Cuerpo de 10, orejas saliendo 2 a cada lado en
+    # la fila del medio, y 3 patas: el cuerpo apoya en \u2580 y cada pata baja a \u2588.
     t=int(time.time())
     FGC=_c(GRIS if v<=0 else (ROJO if v<20 else ACC))
-    cab="   "+"\u2588"*18+"   "          # cabeza (18 de cuerpo)
-    tro="\u2588"*24                      # tronco + orejas (sobresalen 3 a cada lado)
+    cab="  "+"\u2588"*10+"  "           # cabeza
+    tro="\u2588"*14                     # tronco + orejas
     if v<=0:
-        pat="   "+"\u2580"*18+"   "      # k.o.: tumbado, sin patas
+        pat="  "+"\u2580"*10+"  "       # k.o.: tumbado, sin patas
     else:
-        _q=t%12
-        anda=(_q<3) or os.environ.get("STATUSLINE_MASCOT_WALK","")=="1"
-        BAJA="\u2588"*4; SUBE="\u2580"*4; HUE="\u2580"*3
+        anda=(t%12<3) or os.environ.get("STATUSLINE_MASCOT_WALK","")=="1"
+        BAJA="\u2588"*2; SUBE="\u2580"*2; HUE="\u2580"*2
         if not anda:  i,d=BAJA,BAJA      # quieto: las dos apoyadas
         elif t%2:     i,d=SUBE,BAJA      # paso: alterna la de fuera
         else:         i,d=BAJA,SUBE
-        pat="   "+i+HUE+BAJA+HUE+d+"   "
+        pat="  "+i+HUE+BAJA+HUE+d+"  "
     return [FGC+cab+R, FGC+tro+R, FGC+pat+R]
 
 def padr(s,w):
@@ -263,9 +261,13 @@ def ctr(plain, colored, w=MASCOT_W):
 izq=[assemble(s2a, CW), assemble(s2b, CW), cuello, "", ""]
 if MASCOT and all(vis(x)<=CW for x in izq):
     etq=("\u2726 "+clbl) if vida>=95 else clbl
-    tarjeta=[ctr(etq, col+B+etq+R)]+mascot(vida)+[ctr("\u25b0"*14, lifebar(vida,col,14))]
+    tarjeta=[ctr(etq, col+B+etq+R)]+mascot(vida)+[ctr("\u25b0"*10, lifebar(vida,col,10))]
+    # Claude Code recorta los espacios del principio de la linea: si la izquierda va
+    # vacia, el sangrado desaparece y la tarjeta se cae al borde izquierdo. Se ancla
+    # con un braille en blanco (U+2800), que se pinta vacio pero no es un espacio.
     print(line1)
     for _l,_c in zip(izq,tarjeta):
+        if not ANSI.sub("",_l).strip(): _l="\u2800"
         print(padr(_l,CW)+" "*MASCOT_GAP+_c)
 else:                                            # terminal estrecha: el diseño de 3 filas
     line2=assemble(s2, WIDTH)
