@@ -75,16 +75,17 @@ La statusline solo necesita `python3` (usa la librería estándar; nada de `jq`)
 Las líneas truncan al ancho real de la terminal y sueltan elementos de menor
 prioridad antes que hacer *wrap* (que descuadra la caja del prompt).
 
-En terminal ancha (≥60 columnas) son **seis filas**: los datos a la izquierda y
-la **tarjeta del bicho** anclada a la derecha de las filas 2 a 6.
+En terminal ancha (≥60 columnas) son **siete filas**: los datos a la izquierda y
+la **tarjeta del bicho** anclada a la derecha de las filas 2 a 7.
 
 ```
 ▍Opus 5 (1M context) │ default │ projects/claude-code-themes (main✷)
-███████░░░░░░░░░ 45% │ $4.56 │ +0/-0                       vibrante
-xhigh │ 5h 28% 7d 12%                                     ██████████
-                                                        ███ >    < ███
-                                                          ██▀▀██▀▀██
-                                                          ▰▰▰▰▰▰▰▰▰▱
+███████░░░░░░░░░ 45% │ $4.56 │ +0/-0                      vibrante
+xhigh │ 5h 28% 7d 12%                                   ████████████
+                                                        ███▛█  █▜███
+                                                       ████▙█  █▟████
+                                                        ██▀▀▀██▀▀▀██
+                                                        ▰▰▰▰▰▰▰▰▰▰▱▱
 ```
 
 - **fila 1** — `▍modelo · estilo · dir (rama✷) · VIM`
@@ -104,32 +105,35 @@ Por debajo de 60 columnas la tarjeta desaparece y se vuelve al diseño compacto 
 
 ### La mascota
 
-La tarjeta son cinco filas de 14 celdas, todo centrado al ancho del sprite:
+La tarjeta son seis filas de 16 celdas, todo centrado al ancho del sprite:
 
 ```
-   vibrante     <- estado
-  ██████████    <- cabeza
-███ >    < ███  <- tronco: orejas fuera y ojos recortados
-  ██▀▀██▀▀██    <- las tres patas
-  ▰▰▰▰▰▰▰▰▰▱    <- barra de vida
+   vibrante      <- estado
+ ████████████    <- cuerpo por encima de la cara
+ ███▛█  █▜███    <- cara, mitad de arriba
+████▙█  █▟████   <- brazos fuera, con sus marcas, y mitad de abajo
+ ██▀▀▀██▀▀▀██    <- las tres patas
+ ▰▰▰▰▰▰▰▰▰▰▱▱    <- barra de vida
 ```
 
-El bicho son 14×6 píxeles en tres filas de texto, con medios bloques para la
-resolución vertical. El cuerpo apoya en `▀` y cada pata baja a `█`, que es lo que
-deja el hueco entre patas.
+El bicho son 16×8 píxeles en cuatro filas de texto, montado como los iconos de
+rol de Claude: cuerpo por encima **y por debajo** de la cara, brazos que salen a
+los lados con su marca, y tres patas. El cuerpo apoya en `▀` y cada pata baja a
+`█`, que es lo que deja el hueco entre patas.
 
-Los ojos van **tallados** en el cuerpo: el tronco se pinta a color de fondo y
-encima se dibuja en negro con medios bloques, de modo que cada ojo ocupa **2×2
-celdas** repartidas entre la fila de la cabeza y la del tronco. Eso es lo que
-permite que el chevron del logo salga de verdad —
+La cara va **tallada** en el cuerpo: se pinta el cuerpo a color de fondo y encima
+se dibuja en negro con medios bloques. Cada ojo son **3×2 celdas = 6×4 píxeles**,
+con un bloque entero en el centro, que es lo que le da el trazo gordo del estilo:
 
 ```
-▀▄        ▄▀
-▄▀        ▀▄
+████░░      ░░████
+░░████      ████░░
+░░████      ████░░
+████░░      ░░████
 ```
 
-— en vez de un `>` de una sola celda, que a este tamaño se lee como un carácter
-de texto pegado al dibujo y no como parte de él.
+Un chevron de una sola celda (`>`) se lee como un carácter de texto pegado al
+dibujo; a 6×4 píxeles se lee como parte de él.
 
 **El cuerpo va del color del estado**, el mismo que la etiqueta y la barra: no
 tiene sentido un bicho azul brillante con la barra de vida en rojo. Cada estado
@@ -143,7 +147,7 @@ tiene además su versión:
 | ≥40 | entrecerrados | de pie, ya no anda |
 | ≥20 | párpados caídos | hombros caídos, quieto |
 | <20 | aspas | hombros caídos, quieto |
-| k.o. | aspas | **patas al aire**, cuerpo tumbado debajo, en gris |
+| k.o. | aspas | se desploma abajo, **patas al aire**, en gris |
 
 Animaciones, todas al techo de 1 fps:
 

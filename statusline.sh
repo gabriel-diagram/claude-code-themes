@@ -73,7 +73,7 @@ WIDTH=max(20, term_width()-_rp)
 
 # --- MASCOTA: reserva de hueco a la derecha de L2/L3 --------------------------------
 # La L1 NO se toca: ahi Claude Code pinta sus badges alineados a la derecha.
-MASCOT_W=14; MASCOT_GAP=2
+MASCOT_W=16; MASCOT_GAP=2
 MASCOT=(os.environ.get("STATUSLINE_MASCOT","1").lower() not in ("0","off","no")
         and WIDTH>=60)
 CW=WIDTH-(MASCOT_W+MASCOT_GAP) if MASCOT else WIDTH
@@ -162,19 +162,21 @@ _forzado=bool(_mc)        # si lo fuerzas por env, manda el env y no el estado
 def _bgesc(e): return e.replace("[38;","[48;")   # el mismo color, pero de fondo
 
 def mascot(v, col):
-    # 14x6 pixeles en 3 filas de texto. Cuerpo pintado a color de FONDO y los ojos
-    # tallados en negro encima, a medios bloques: cada ojo ocupa 2x2 celdas, asi que
-    # el chevron del logo sale de verdad (un ">" de una celda se leia como texto).
-    #   \u2580\u2584   arriba          El cuerpo va del color del ESTADO, salvo k.o. (gris)
-    #   \u2584\u2580   abajo           o si lo fuerzas con STATUSLINE_MASCOT_COLOR.
+    # 16x8 pixeles en 4 filas de texto, al estilo de los iconos: cuerpo por encima y
+    # por debajo de la cara, brazos fuera con sus marcas, y tres patas. El cuerpo se
+    # pinta a color de FONDO y la cara se talla en negro con medios bloques, asi que
+    # cada ojo son 6x4 pixeles con un bloque entero en el centro -> trazo gordo.
+    #   \u2588\u2588\u2588\u2588\u2591\u2591      El cuerpo va del color del ESTADO, salvo k.o. (gris)
+    #   \u2591\u2591\u2588\u2588\u2588\u2588      o si lo fuerzas con STATUSLINE_MASCOT_COLOR.
     t=int(time.time())
     cue=_c(GRIS) if v<=0 else (_c(ACC) if _forzado else col)
     BG=_bgesc(cue); N="\033[38;5;16m"
-    CHEV =("\u2580\u2584","\u2584\u2580","\u2584\u2580","\u2580\u2584")  # > <  los del logo
-    REDO =("\u2584\u2584","\u2580\u2580","\u2584\u2584","\u2580\u2580")  # o o  redondos
-    REND =("  ","\u2580\u2580","  ","\u2580\u2580")                  # - -  entrecerrados
-    CAID =("  ","\u2584\u2584","  ","\u2584\u2584")                  # ~ ~  parpados caidos
-    EQUIS=("\u259a\u259e","\u259e\u259a","\u259a\u259e","\u259e\u259a")  # x x  aspa entera
+    # (ojo izq arriba, izq abajo, der arriba, der abajo), 3 celdas cada uno
+    CHEV =("\u2580\u2588\u2584","\u2584\u2588\u2580","\u2584\u2588\u2580","\u2580\u2588\u2584")  # > <  los del logo
+    REDO =("\u2584\u2588\u2584","\u2580\u2588\u2580","\u2584\u2588\u2584","\u2580\u2588\u2580")  # o o  redondos
+    REND =("\u2584\u2584\u2584","\u2580\u2580\u2580","\u2584\u2584\u2584","\u2580\u2580\u2580")  # - -  entrecerrados
+    CAID =("   ","\u2588\u2588\u2588","   ","\u2588\u2588\u2588")                  # ~ ~  parpados caidos
+    EQUIS=("\u2580\u2584\u2580","\u2584\u2580\u2584","\u2580\u2584\u2580","\u2584\u2580\u2584")  # x x  aspa
     if   v<=0:  oj=EQUIS
     elif v>=80: oj=CHEV
     elif v>=60: oj=REDO
@@ -184,26 +186,28 @@ def mascot(v, col):
     if   v>=40 and t%7==0: oj=REND      # parpadeo normal
     elif 0<v<40 and t%4==0: oj=CAID     # ya solo pestanea a duras penas
     a1,a2,b1,b2=oj
-    ancho=BG+N+" "+a1+"    "+b1+" "+R           # 10 celdas: mitad de ARRIBA de los ojos
-    bajo =BG+N+" "+a2+"    "+b2+" "+R           # 10 celdas: mitad de ABAJO
-    tronco=BG+N+"   "+a2+"    "+b2+"   "+R      # 14: orejas fuera, mitad de abajo
-    troncoalto=BG+N+"   "+a1+"    "+b1+"   "+R  # 14: idem con la mitad de arriba
+    MARCA="\u2584"                                             # la marca de los brazos
+    cuerpo ="  "+BG+" "*12+R+"  "                            # 12 de cuerpo, cols 2-13
+    caraalt="  "+BG+N+" "+a1+"    "+b1+" "+R+"  "            # 12: mitad de ARRIBA
+    carabaj="  "+BG+N+" "+a2+"    "+b2+" "+R+"  "            # 12: mitad de ABAJO
+    brazos =BG+N+MARCA+"  "+a2+"    "+b2+"  "+MARCA+R        # 16: brazos fuera + marcas
+    brazalt=BG+N+MARCA+"  "+a1+"    "+b1+"  "+MARCA+R        # 16: idem mitad de arriba
 
-    if v<=0:
-        # K.O.: patas al aire y el cuerpo tumbado debajo. Da un espasmo cada 9 s.
-        pa="\u2584\u2584"; es=(t%9==0)
-        patas="  "+pa+"  "+("\u2588\u2588" if es else pa)+"  "+pa+"  "
-        return [cue+patas+R, troncoalto, "  "+bajo+"  "]
+    if v<=0:                       # K.O.: se desploma abajo, patas al aire
+        pa="\u2588\u2588"; es=(t%9==0)
+        return [" "*16,
+                cue+"  "+pa+"   "+("\u2584\u2584" if es else pa)+"   "+pa+"  "+R,
+                brazalt, carabaj]
 
-    cab=("  "+ancho+"  ") if v>=40 else ("   "+BG+N+a1+"    "+b1+R+"   ")  # hundido
-    BAJ="\u2588\u2588"; SUB="\u2580\u2580"; HUE="\u2580\u2580"
+    cab=cuerpo if v>=40 else ("   "+BG+" "*10+R+"   ")   # hundido: hombros caidos
+    BAJ="\u2588\u2588"; SUB="\u2580\u2580"; HUE="\u2580"*3
     if v>=60:                                    # solo anda mientras le queda cuerda
         anda=(t%12<4) or os.environ.get("STATUSLINE_MASCOT_WALK","")=="1"
         ciclo=[(BAJ,BAJ,BAJ),(SUB,BAJ,BAJ),(BAJ,SUB,BAJ),(BAJ,BAJ,SUB)]
         p1,p2,p3=ciclo[t%4 if anda else 0]       # la onda recorre las tres patas
     else:
         p1,p2,p3=BAJ,BAJ,BAJ                     # cansado: quieto
-    return [cue+cab+R, tronco, cue+"  "+p1+HUE+p2+HUE+p3+"  "+R]
+    return [cab, caraalt, brazos, cue+"  "+p1+HUE+p2+HUE+p3+"  "+R]
 
 def padr(s,w):
     n=w-vis(s)
@@ -286,10 +290,10 @@ def ctr(plain, colored, w=MASCOT_W):
     if n<0: return colored
     return " "*(n//2)+colored+" "*(n-n//2)
 
-izq=[assemble(s2a, CW), assemble(s2b, CW), cuello, "", ""]
+izq=[assemble(s2a, CW), assemble(s2b, CW), cuello, "", "", ""]
 if MASCOT and all(vis(x)<=CW for x in izq):
     etq=("\u2726 "+clbl) if vida>=95 else clbl
-    tarjeta=[ctr(etq, col+B+etq+R)]+mascot(vida,col)+[ctr("\u25b0"*10, lifebar(vida,col,10))]
+    tarjeta=[ctr(etq, col+B+etq+R)]+mascot(vida,col)+[ctr("\u25b0"*12, lifebar(vida,col,12))]
     # Claude Code recorta los espacios del principio de la linea: si la izquierda va
     # vacia, el sangrado desaparece y la tarjeta se cae al borde izquierdo. Se ancla
     # con un braille en blanco (U+2800), que se pinta vacio pero no es un espacio.
