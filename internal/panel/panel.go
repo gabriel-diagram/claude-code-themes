@@ -2,7 +2,7 @@
 // way it gets fed from a script.
 //
 //	ccpet                       the panel
-//	ccpet feed                  feed it by hand (+3 xp, -2 hunger, 4 a day)
+//	ccpet feed                  feed it by hand (+3 xp, -2 hunger, one every 4h)
 //	ccpet <event>               a meal: tests | commit | compact | task | overflow
 //	ccpet count <counter> [n]   add to a behaviour counter
 //	ccpet day <name>            count CONSECUTIVE DAYS, not occurrences
@@ -93,7 +93,7 @@ func Run(args []string, stdout, stderr io.Writer, statePath string, now time.Tim
 			names = append(names, name)
 		}
 		sort.Strings(names)
-		fmt.Fprintf(stderr, "ccpet: %q is not food. Try: %s\n", action, strings.Join(names, ", "))
+		fmt.Fprintf(stderr, "ccpet: %q no es comida. Prueba: %s\n", action, strings.Join(names, ", "))
 		return 2
 	}
 	return eat(stdout, statePath, action, first, now)
@@ -124,8 +124,8 @@ func eat(out io.Writer, statePath, event, note string, now time.Time) int {
 	fmt.Fprintf(out, "%s%+d xp%s %s· %s%s\n",
 		theme.Fg(tint), food.XP, theme.Reset, theme.Fg(theme.Dim), food.Label, theme.Reset)
 	if after != before {
-		fmt.Fprintf(out, "%s%s evolves: %s -> %s%s\n",
-			theme.Fg(theme.Number), theme.Bold, before, after, theme.Reset)
+		fmt.Fprintf(out, "%s%sevoluciona: %s › %s%s\n",
+			theme.Fg(theme.Number), theme.Bold, pet.Name(before), pet.Name(after), theme.Reset)
 	}
 	return 0
 }
@@ -141,7 +141,19 @@ func lineage(form string) []string {
 			trail[0] = temperament
 		}
 	}
+	for i, step := range trail {
+		trail[i] = pet.Name(step)
+	}
 	return trail
+}
+
+// nextMark is NextMark with the top-of-the-ladder check in front of it, so the
+// tree is not walked on every panel that still has XP left to earn.
+func nextMark(s *pet.State, form string, hasUpcoming bool) (pet.Mark, bool) {
+	if hasUpcoming {
+		return pet.Mark{}, false
+	}
+	return pet.NextMark(s, form)
 }
 
 // roughly spells a duration the way you would say it out loud.
@@ -191,20 +203,38 @@ func showPanel(out io.Writer, statePath string, now time.Time) int {
 	}
 	nl("")
 	joiner := " " + theme.Fg(theme.Rule) + "›" + reset + dim + " "
-	nl("  " + theme.Fg(theme.Number) + theme.Bold + form + reset + "   " +
-		dim + "level " + reset + emph + strconv.Itoa(level) + reset + "   " +
-		dim + strings.Join(trail, joiner) + reset)
+	head := "  " + theme.Fg(theme.Number) + theme.Bold + pet.Name(form) + reset +
+		"   " + dim + "nivel " + reset + emph + strconv.Itoa(level) + reset
+	// The larva's lineage is the larva: printing "chispa nivel 1 chispa" says
+	// the same word twice. It only earns its place once there is a path.
+	if len(trail) > 1 {
+		head += "   " + dim + strings.Join(trail, joiner) + reset
+	}
+	nl(head)
 	nl("")
 
-	xpTotal := float64(s.XP)
+	// The bar is the stretch of THIS level, not the running total: against the
+	// total it would never be empty after a level-up. At the top the ladder is
+	// genuinely finished, so it sits full.
+	xpDone, xpSpan := 1, 1
 	if hasUpcoming {
-		xpTotal = float64(upcomingXP)
-	} else if xpTotal == 0 {
-		xpTotal = 1
+		xpDone, xpSpan, _ = pet.LevelProgress(s.XP)
 	}
 	nl("  " + dim + "xp     " + reset +
-		theme.Bar(float64(s.XP), xpTotal, 16, theme.Ident, theme.CtxEmpty) +
+		theme.Bar(float64(xpDone), float64(xpSpan), 16, theme.Ident, theme.CtxEmpty) +
 		"  " + emph + strconv.Itoa(s.XP) + reset)
+
+	// Out of levels is not out of tree. The canvas: "las ramificaciones no
+	// dependen de la XP sino del hábito" - so at the top the row that still
+	// moves is the habit, and it says which mark it opens.
+	if mark, ok := nextMark(s, form, hasUpcoming); ok {
+		nl("  " + dim + "marca  " + reset +
+			theme.Bar(float64(mark.Done), float64(mark.Threshold), 16,
+				theme.Number, theme.CtxEmpty) +
+			"  " + emph + strconv.Itoa(mark.Done) + "/" +
+			strconv.Itoa(mark.Threshold) + reset +
+			dim + " para " + reset + theme.Fg(theme.Number) + pet.Name(mark.Form) + reset)
+	}
 
 	tint := theme.Quota
 	switch {
@@ -213,7 +243,7 @@ func showPanel(out io.Writer, statePath string, now time.Time) int {
 	case s.Hunger >= 4:
 		tint = theme.Number
 	}
-	nl("  " + dim + "hunger " + reset +
+	nl("  " + dim + "hambre " + reset +
 		theme.Bar(float64(s.Hunger), pet.HungerMax, 10, tint, theme.Empty) +
 		"  " + emph + strconv.Itoa(s.Hunger) + reset)
 
@@ -226,28 +256,28 @@ func showPanel(out io.Writer, statePath string, now time.Time) int {
 	if streak == 1 {
 		plural = ""
 	}
-	nl("  " + dim + "streak " + reset +
+	nl("  " + dim + "racha  " + reset +
 		theme.Bar(float64(shown), 7, 7, theme.Link, theme.Empty) +
-		"  " + emph + fmt.Sprintf("%d day%s", streak, plural) + reset +
-		dim + fmt.Sprintf(" · best %d", s.BestStreak) + reset)
+		"  " + emph + fmt.Sprintf("%d día%s", streak, plural) + reset +
+		dim + fmt.Sprintf(" · mejor %d", s.BestStreak) + reset)
 	nl("")
 
 	var parts []string
 	if hasUpcoming {
-		target := upcoming
-		if target == "" {
-			target = fmt.Sprintf("level %d", level+1)
+		target := pet.Name(upcoming)
+		if upcoming == "" {
+			target = fmt.Sprintf("nivel %d", level+1)
 		}
 		parts = append(parts, emph+strconv.Itoa(upcomingXP-s.XP)+reset+
-			dim+" to "+reset+theme.Fg(theme.Number)+target+reset)
+			dim+" para "+reset+theme.Fg(theme.Number)+target+reset)
 	}
 	if s.LastFed != 0 {
 		minutes := (now.Unix() - s.LastFed) / 60
-		when := fmt.Sprintf("%dm ago", minutes)
+		when := fmt.Sprintf("hace %dm", minutes)
 		if minutes >= 60 {
-			when = fmt.Sprintf("%dh %02dm ago", minutes/60, minutes%60)
+			when = fmt.Sprintf("hace %dh %02dm", minutes/60, minutes%60)
 		}
-		parts = append(parts, dim+"fed "+when+reset)
+		parts = append(parts, dim+"comió "+when+reset)
 	}
 	if len(parts) > 0 {
 		nl("  " + strings.Join(parts, " "+theme.Fg(theme.Rule)+"│"+reset+" "))
@@ -255,7 +285,7 @@ func showPanel(out io.Writer, statePath string, now time.Time) int {
 
 	if len(s.Log) > 0 && s.LogDay == pet.Today(now) {
 		nl("")
-		nl("  " + dim + "today" + reset)
+		nl("  " + dim + "hoy" + reset)
 		entries := s.Log
 		if len(entries) > 8 {
 			entries = entries[len(entries)-8:]

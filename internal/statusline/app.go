@@ -1,4 +1,4 @@
-// Package statusline renders the three bands and the pet's card.
+// Package statusline renders the four bands and the pet's card.
 //
 //	row 0   band 1 - engine    state label
 //	row 1   band 2 - work      upper body

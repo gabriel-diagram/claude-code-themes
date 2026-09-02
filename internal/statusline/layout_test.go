@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gabriel-diagram/claude-code-themes/internal/pet"
 	"github.com/gabriel-diagram/claude-code-themes/internal/theme"
 )
 
@@ -202,5 +203,78 @@ func TestContextLabelAndDuration(t *testing.T) {
 		if got := formatDuration(f(tc.ms)); got != tc.want {
 			t.Errorf("formatDuration(%v) = %q, want %q", tc.ms, got, tc.want)
 		}
+	}
+}
+
+func TestBandFourCarriesTheStateTheCanvasDraws(t *testing.T) {
+	// The canvas, artboard 01: "Banda 4 - el bicho. Oficio, nivel, XP y
+	// estado, y detrás lo que tenga que decir." The state was the missing one.
+	lines := render(t, payload, 140)
+	last := theme.Strip(lines[len(lines)-1])
+
+	// The card is pinned to the right of band 1, cardWidth columns of it.
+	// Counted from the end, because the rule on top is optional.
+	row := []rune(theme.Strip(lines[len(lines)-4]))
+	label := strings.TrimSpace(string(row[len(row)-cardWidth:]))
+	label = strings.TrimSpace(strings.TrimSuffix(label, "✦"))
+	if label == "" {
+		t.Fatal("the card has no state label to compare against")
+	}
+	if !strings.Contains(last, label) {
+		t.Errorf("band 4 %q does not carry the state %q", last, label)
+	}
+}
+
+func TestBandFourKeepsTheStateWhenTheBarIsGone(t *testing.T) {
+	// At the top of the ladder with the mark already worn there is no bar
+	// left. The band must not fall back to a stub of trade plus level.
+	band := petBand(Card{
+		Form:  "exterminador",
+		Level: 5,
+		State: "vibrante",
+		Vital: pet.StateFor(20, nil),
+	}, 140)
+	line := theme.Strip(assemble(band, 140))
+	for _, want := range []string{"exterminador", "nivel 5"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("band 4 %q is missing %q", line, want)
+		}
+	}
+	if theme.Width(line) <= theme.Width("exterminador   nivel 5") {
+		t.Errorf("band 4 came out bare at the top: %q", line)
+	}
+}
+
+func TestBandFourSwapsTheBarForTheHabitAtTheTop(t *testing.T) {
+	band := petBand(Card{
+		Form:  "bughunter",
+		Level: 5,
+		Done:  12,
+		Span:  15,
+		Mark:  "exterminador",
+		State: "vibrante",
+		Vital: pet.StateFor(20, nil),
+	}, 140)
+	line := theme.Strip(assemble(band, 140))
+	if !strings.Contains(line, "exterminador") {
+		t.Errorf("the habit bar does not name the mark it opens: %q", line)
+	}
+	// 12/15 of twelve cells is ten full, two empty.
+	if !strings.Contains(line, strings.Repeat("█", 10)+strings.Repeat("░", 2)) {
+		t.Errorf("the habit bar is not at 12/15: %q", line)
+	}
+}
+
+func TestBandFourStillCollapsesToTheTradeWhenNarrow(t *testing.T) {
+	// The extra element must not survive the floor the canvas sets.
+	band := petBand(Card{
+		Form:  "bughunter",
+		Level: 5,
+		State: "vibrante",
+		Vital: pet.StateFor(20, nil),
+	}, 90)
+	line := theme.Strip(assemble(band, 90))
+	if strings.TrimSpace(line) != "bughunter" {
+		t.Errorf("below 100 columns band 4 is %q, want just the trade", line)
 	}
 }

@@ -200,14 +200,14 @@ func On(out io.Writer, root string) error {
 		return fmt.Errorf("settings.json unreadable (%w): leaving it alone", err)
 	}
 	if copyPath, err := Backup(path); err == nil && copyPath != "" {
-		fmt.Fprintf(out, "backup: %s\n", copyPath)
+		fmt.Fprintf(out, "copia de seguridad: %s\n", copyPath)
 	}
 	doc["statusLine"] = statusLineEntry(root)
 	if err := save(doc, path); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "statusline on -> %s\n", Command(root))
-	fmt.Fprintln(out, "pick the theme too, if you have not: /theme -> Terminal")
+	fmt.Fprintf(out, "statusline encendida -> %s\n", Command(root))
+	fmt.Fprintln(out, "elige también el tema, si no lo has hecho: /theme -> Terminal")
 	return nil
 }
 
@@ -219,17 +219,17 @@ func Off(out io.Writer) error {
 		return fmt.Errorf("settings.json unreadable (%w): leaving it alone", err)
 	}
 	if _, present := doc["statusLine"]; !present {
-		fmt.Fprintln(out, "statusline was already off")
+		fmt.Fprintln(out, "la statusline ya estaba apagada")
 		return nil
 	}
 	if copyPath, err := Backup(path); err == nil && copyPath != "" {
-		fmt.Fprintf(out, "backup: %s\n", copyPath)
+		fmt.Fprintf(out, "copia de seguridad: %s\n", copyPath)
 	}
 	delete(doc, "statusLine")
 	if err := save(doc, path); err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "statusline off")
+	fmt.Fprintln(out, "statusline apagada")
 	return nil
 }
 
@@ -242,7 +242,7 @@ func Status(out io.Writer) error {
 	if entry, ok := doc["statusLine"].(map[string]any); ok {
 		fmt.Fprintf(out, "statusline: %v\n", entry["command"])
 	} else {
-		fmt.Fprintln(out, "statusline: off")
+		fmt.Fprintln(out, "statusline: apagada")
 	}
 	var wired []string
 	if hooks, ok := doc["hooks"].(map[string]any); ok {
@@ -262,11 +262,11 @@ func Status(out io.Writer) error {
 	}
 	sort.Strings(wired)
 	if len(wired) == 0 {
-		fmt.Fprintln(out, "feeding hooks in settings.json: none")
+		fmt.Fprintln(out, "hooks de comida en settings.json: ninguno")
 	} else {
-		fmt.Fprintf(out, "feeding hooks in settings.json: %s\n", strings.Join(wired, ", "))
+		fmt.Fprintf(out, "hooks de comida en settings.json: %s\n", strings.Join(wired, ", "))
 	}
-	fmt.Fprintln(out, "(a plugin install wires its own hooks; those do not show up here)")
+	fmt.Fprintln(out, "(si lo instalas como plugin, sus hooks son suyos y no salen aquí)")
 	return nil
 }
 
@@ -278,11 +278,11 @@ func Install(out io.Writer, root string, withHooks bool) error {
 		return fmt.Errorf("settings.json unreadable (%w): leaving it alone", err)
 	}
 	if copyPath, err := Backup(path); err == nil && copyPath != "" {
-		fmt.Fprintf(out, "  backup: %s\n", copyPath)
+		fmt.Fprintf(out, "  copia de seguridad: %s\n", copyPath)
 	}
 
 	doc["statusLine"] = statusLineEntry(root)
-	fmt.Fprintln(out, "  statusLine wired up")
+	fmt.Fprintln(out, "  statusLine conectada")
 
 	dropOurHooks(doc)
 	if withHooks {
@@ -308,9 +308,9 @@ func Install(out io.Writer, root string, withHooks bool) error {
 			})
 		}
 		doc["hooks"] = hooks
-		fmt.Fprintln(out, "  hooks wired up: PostToolUse (all), PreCompact, SessionEnd")
+		fmt.Fprintln(out, "  hooks conectados: PostToolUse (todas), PreCompact, SessionEnd")
 	} else {
-		fmt.Fprintln(out, "  hooks NOT installed (pass --hooks if you want them)")
+		fmt.Fprintln(out, "  hooks NO instalados (pasa --hooks si los quieres)")
 	}
 	return save(doc, path)
 }
@@ -326,13 +326,13 @@ func Uninstall(out io.Writer) error {
 		return fmt.Errorf("cannot touch settings.json (%w)", err)
 	}
 	if copyPath, err := Backup(path); err == nil && copyPath != "" {
-		fmt.Fprintf(out, "  backup: %s\n", copyPath)
+		fmt.Fprintf(out, "  copia de seguridad: %s\n", copyPath)
 	}
 	delete(doc, "statusLine")
 	dropOurHooks(doc)
 	if err := save(doc, path); err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "  settings.json cleaned (the theme is left alone: change it with /theme)")
+	fmt.Fprintln(out, "  settings.json limpio (el tema no se toca: cámbialo con /theme)")
 	return nil
 }

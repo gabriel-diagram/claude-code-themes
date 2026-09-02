@@ -8,12 +8,13 @@ import (
 	"github.com/gabriel-diagram/claude-code-themes/internal/theme"
 )
 
-// The three bands.
+// The four bands.
 //
 //	1 ENGINE  model, context, reasoning, cache   -> what changes every turn
 //	2 WORK    repo, branch, diff, cost           -> what ends up in a commit
 //	3 QUOTA   directory, 5h/7d limits, time      -> read out of the corner of
 //	                                                the eye, so it goes grey
+//	4 PET     trade, level, bar, state, bubble   -> see petBand, below
 
 // sixSigFigs renders a float the way "%g" does: six significant digits, no
 // trailing zeros.
@@ -158,14 +159,16 @@ func work(p *Payload) []segment {
 	return out
 }
 
-// petBand is band 4, the pet's own line: who it is, how far along, and whatever
-// it has to say. The canvas puts it under the three data bands and alongside the
-// card, so the four rows on the left line up with the four on the right.
+// petBand is band 4, the pet's own line. The canvas: "Banda 4 - el bicho.
+// Oficio, nivel, XP y estado, y detrás lo que tenga que decir." It sits under
+// the three data bands and alongside the card, so the four rows on the left
+// line up with the four on the right.
 //
-// How it feels is NOT here, even though the canvas draws it twice: the state
-// already sits on top of the card, and two "lively" on one footer read as a
-// bug. The card's copy is the one that stays, because below BubbleMin this band
-// shrinks to the trade name and that copy is then the only one left.
+// The state is here as well as on the card, which is what the canvas draws and
+// which is not the duplication it looks like. The card centres it in nine
+// columns and the card is the first thing to go when the terminal narrows;
+// this copy is the one that survives, and it is what keeps the band standing
+// when the bar has nothing left to measure.
 //
 // Below BubbleMin columns it collapses to just the trade name - the canvas:
 // "con menos de 100 columnas se cae sola y solo queda el oficio".
@@ -184,14 +187,34 @@ func petBand(c Card, columns int) []segment {
 			theme.Fg(theme.Emph)+strconv.Itoa(c.Level)+theme.Reset).
 		truncatable(theme.Fg(theme.Dim), level).withSep(" "))
 
-	if c.NextXP > 0 {
-		out = append(out, seg(3,
-			theme.Bar(float64(c.XP), float64(c.NextXP), xpBarWidth,
-				theme.Ident, theme.CtxEmpty)).withSep(" "))
+	// One bar, two currencies. XP is green like every other count that goes
+	// up; a habit is amber and says out loud which mark it is filling, so the
+	// two are never read as the same number.
+	if c.Span > 0 {
+		if c.Mark == "" {
+			out = append(out, seg(3,
+				theme.Bar(float64(c.Done), float64(c.Span), xpBarWidth,
+					theme.Ident, theme.CtxEmpty)).withSep(" "))
+		} else {
+			bar := theme.Bar(float64(c.Done), float64(c.Span), xpBarWidth,
+				theme.Number, theme.CtxEmpty)
+			out = append(out, seg(3, bar+" "+
+				theme.Fg(theme.Number)+c.Mark+theme.Reset).
+				truncatable(theme.Fg(theme.Number), c.Mark).withSep(" "))
+		}
+	}
+
+	// The state goes before the bar when the width bites: between the floor
+	// and a comfortable terminal the card is still on screen carrying its own
+	// copy, and the bar is not written anywhere else.
+	if c.State != "" {
+		out = append(out, seg(4,
+			theme.Fg(c.Vital.Colour)+c.State+theme.Reset).
+			truncatable(theme.Fg(c.Vital.Colour), c.State).withSep(" "))
 	}
 
 	if c.Bubble != "" {
-		out = append(out, seg(4,
+		out = append(out, seg(5,
 			theme.Fg(theme.Tail)+"◗"+theme.Reset+" "+
 				theme.Fg(theme.Text)+c.Bubble+theme.Reset).
 			truncatable(theme.Fg(theme.Text), c.Bubble))

@@ -65,8 +65,18 @@ spark
 que va más alto en ese momento. Si cambias de hábitos antes de subir de nivel,
 cambias de rama.
 
-Las de nivel 5 no dependen de la XP sino del **hábito**: se desbloquean al
-cumplir su condición estando en la evolución padre.
+**Los nombres del árbol son ids, no texto.** `spark`, `bughunter` o `exterminator`
+son lo que hay escrito en `pet.json` desde la versión en Python, y renombrarlos
+reescribiría todos los ficheros de vida que hay por ahí. Lo que se lee en
+pantalla es la columna en castellano del lienzo —*chispa*, *cazabugs*,
+*exterminador*—, y vive en `internal/pet/names.go`. Una forma sin traducir cae
+en su propio id: un nombre que falta es un nombre por elegir, no un fallo.
+
+Cuál de las dos marcas te toca no lo decide la XP sino el **hábito**: se
+desbloquean al cumplir su condición estando en la evolución padre. La XP sigue
+poniendo el *cuándo* —son formas de nivel 5, y el nivel 5 son 900— pero ya no
+reparte nada: a partir de ahí lo único que se mueve es el hábito, y es eso lo
+que mide la barra en la banda 4 y la fila `marca` de `/pet`.
 
 | Nivel | XP | Qué eres |
 | --- | --- | --- |
@@ -74,12 +84,17 @@ cumplir su condición estando en la evolución padre.
 | 2 | 60 | temperamento — cómo trabajas |
 | 3 | 180 | oficio — en qué eres bueno |
 | 4 | 400 | el mismo oficio, asentado |
-| 5 | 900 | marca — más la condición de hábito |
+| 5 | 900 | marca — más la condición de hábito, o una secreta ya ganada |
 
-Y dos secretas fuera del árbol: **phoenix** (llegar a hambre 10 y remontar a 0 en
-la misma sesión, solo desde `feral` o `marathon`) y **chimera** (dos
-temperamentos empatados al subir a nivel 4; hereda ojos de uno y cuerpo del
-otro).
+Y dos secretas fuera del árbol: **phoenix** / *fénix* (llegar a hambre 10 y
+remontar a 0 en la misma sesión, solo desde `feral` o `marathon`) y **chimera** /
+*quimera* (dos temperamentos empatados al subir a nivel 4; hereda ojos de uno y
+cuerpo del otro).
+
+Las dos son formas de **nivel 5** y esperan a los 900 XP como cualquier otra. La
+condición se cumple antes —la de la quimera, a nivel 4— y entre una cosa y la
+otra el panel dice a qué aspiras: `488 para quimera`. Entregarla en el acto se
+saltaba el nivel 4 entero y ponía un «nivel 5» al lado de 412 XP.
 
 ## La comida
 

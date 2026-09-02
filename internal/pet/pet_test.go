@@ -269,11 +269,34 @@ func TestATieFallsBackToDesignOrder(t *testing.T) {
 }
 
 func TestASecretWinsOverTheTreeAndAnUnknownOneIsIgnored(t *testing.T) {
-	if form, level := CurrentForm(&State{Secret: "phoenix"}); form != "phoenix" || level != 5 {
-		t.Errorf("secret gave %s/%d", form, level)
+	won := &State{XP: 900, Secret: "phoenix",
+		Counters: map[string]int{"impulsive": 9, "ctx_maxed": 9}}
+	if form, level := CurrentForm(won); form != "phoenix" || level != 5 {
+		t.Errorf("secret gave %s/%d, want phoenix/5", form, level)
 	}
-	if form, _ := CurrentForm(&State{Secret: "godzilla"}); form != Root {
-		t.Errorf("an unknown secret gave %s", form)
+	if form, _ := CurrentForm(&State{XP: 900, Secret: "godzilla"}); form == "godzilla" {
+		t.Error("an unknown secret was handed over")
+	}
+}
+
+func TestASecretStillWaitsForLevelFive(t *testing.T) {
+	// The condition is met at level 4 - "dos temperamentos empatados al subir
+	// a nivel 4" - but the form is a level-5 one. The canvas draws exactly
+	// this pet: "refactor · nivel 4" with "488 para quimera" underneath.
+	pending := &State{XP: 412, Secret: "chimera",
+		Counters: map[string]int{"methodical": 40, "inquisitive": 40, "diffs": 30}}
+	form, level := CurrentForm(pending)
+	if form == "chimera" {
+		t.Error("the secret was handed over before level 5")
+	}
+	if form != "refactor" || level != 4 {
+		t.Errorf("pending secret gave %s/%d, want refactor/4", form, level)
+	}
+
+	// One more level and it is hers.
+	pending.XP = 900
+	if form, level := CurrentForm(pending); form != "chimera" || level != 5 {
+		t.Errorf("at 900 xp the secret gave %s/%d, want chimera/5", form, level)
 	}
 }
 
@@ -797,3 +820,212 @@ func TestEveryFormWithARepertoireHasThreeLines(t *testing.T) {
 }
 
 func first(int) int { return 0 }
+
+func TestTheXPBarMeasuresTheLevelNotTheTotal(t *testing.T) {
+	// Against the running total the bar opens a third full on the morning
+	// after a level-up. Against the stretch it opens empty and closes full,
+	// which is the only reading that is not a lie.
+	for _, c := range []struct {
+		xp         int
+		done, span int
+	}{
+		{0, 0, 60},     // newborn
+		{30, 30, 60},   // halfway through level 1
+		{59, 59, 60},   // one short
+		{60, 0, 120},   // level 2 opens EMPTY, not at a third
+		{120, 60, 120}, // halfway through level 2
+		{179, 119, 120},
+		{180, 0, 220}, // level 3 opens empty
+		{400, 0, 500}, // level 4 opens empty
+		{899, 499, 500},
+	} {
+		done, span, ok := LevelProgress(c.xp)
+		if !ok {
+			t.Errorf("xp %d: no stretch left, want one", c.xp)
+			continue
+		}
+		if done != c.done || span != c.span {
+			t.Errorf("xp %d: %d/%d, want %d/%d", c.xp, done, span, c.done, c.span)
+		}
+	}
+}
+
+func TestTheXPStretchRunsOutAtTheTop(t *testing.T) {
+	for _, xp := range []int{900, 1200, 99999} {
+		if _, _, ok := LevelProgress(xp); ok {
+			t.Errorf("xp %d still has a stretch above it", xp)
+		}
+	}
+}
+
+func TestAHandEditedNegativeXPReadsAsANewborn(t *testing.T) {
+	// pet.json is user-writable. A negative XP must not hand back a zero span
+	// - band 4 reads that as "no bar" and then skips the habit bar too.
+	done, span, ok := LevelProgress(-50)
+	if !ok {
+		t.Fatal("negative xp ran out of ladder")
+	}
+	if wantDone, wantSpan, _ := LevelProgress(0); done != wantDone || span != wantSpan {
+		t.Errorf("negative xp gave %d/%d, want a newborn's %d/%d",
+			done, span, wantDone, wantSpan)
+	}
+}
+
+func TestAtTheTopTheProgressBecomesTheHabit(t *testing.T) {
+	// Level 5, trade but no mark: what is left to reach is the habit.
+	s := New()
+	s.XP = 900
+	s.Counters["inquisitive"] = 5
+	s.Counters["tests"] = 9
+	s.Counters["repro_before_fix"] = 4 // sabueso wants 10 -> 0.40
+	s.Counters["test_streak"] = 12     // exterminator wants 15 -> 0.80
+	form, _ := CurrentForm(s)
+	if form != "bughunter" {
+		t.Fatalf("form is %q, want bughunter", form)
+	}
+	mark, ok := NextMark(s, form)
+	if !ok {
+		t.Fatal("no mark within reach, want the closest one")
+	}
+	if mark.Form != "exterminator" {
+		t.Errorf("closest mark is %q, want exterminator", mark.Form)
+	}
+	if mark.Done != 12 || mark.Threshold != 15 {
+		t.Errorf("habit at %d/%d, want 12/15", mark.Done, mark.Threshold)
+	}
+}
+
+func TestAPetWearingItsMarkHasNothingLeftToReach(t *testing.T) {
+	s := New()
+	s.XP = 900
+	s.Counters["inquisitive"] = 5
+	s.Counters["tests"] = 9
+	s.Counters["test_streak"] = 15 // earned it
+	form, _ := CurrentForm(s)
+	if form != "exterminator" {
+		t.Fatalf("form is %q, want exterminator", form)
+	}
+	if _, ok := NextMark(s, form); ok {
+		t.Error("a pet already wearing its mark was offered another")
+	}
+}
+
+func TestASecretHasNothingLeftToReach(t *testing.T) {
+	s := New()
+	s.XP = 900
+	s.Secret = "phoenix"
+	form, _ := CurrentForm(s)
+	if _, ok := NextMark(s, form); ok {
+		t.Error("a secret was offered a mark to reach")
+	}
+}
+
+func TestAHabitPastItsThresholdDoesNotOverflowTheBar(t *testing.T) {
+	// The habit can be met long before the XP is: at level 3 the mark is not
+	// handed over yet, so the counter keeps running past its own threshold.
+	s := New()
+	s.XP = 180
+	s.Counters["inquisitive"] = 5
+	s.Counters["plans"] = 9
+	s.Counters["longest_plan"] = 400 // cartographer wants 10
+	form, _ := CurrentForm(s)
+	if form != "architect" {
+		t.Fatalf("form is %q, want architect", form)
+	}
+	mark, ok := NextMark(s, form)
+	if !ok {
+		t.Fatal("no mark within reach")
+	}
+	if mark.Done > mark.Threshold {
+		t.Errorf("habit reported %d/%d, over its own threshold",
+			mark.Done, mark.Threshold)
+	}
+	if got := mark.Share(); got > 1 {
+		t.Errorf("share is %v, want it capped at 1", got)
+	}
+}
+
+func TestEveryFormInTheTreeHasASpanishName(t *testing.T) {
+	// The canvas names all 27. A form that reaches the panel without one
+	// would print its id in the middle of a Spanish sentence.
+	seen := map[string]bool{Root: true}
+	for parent, kids := range Tree {
+		seen[parent] = true
+		for _, kid := range kids {
+			seen[kid] = true
+		}
+	}
+	for _, secret := range Secrets {
+		seen[secret] = true
+	}
+	if len(seen) != 27 {
+		t.Errorf("the tree has %d forms, the canvas draws 27", len(seen))
+	}
+	for form := range seen {
+		if Names[form] == "" {
+			t.Errorf("%q has no Spanish name", form)
+		}
+	}
+	for _, temperament := range Temperaments {
+		if Names[temperament] == "" {
+			t.Errorf("the temperament %q has no Spanish name", temperament)
+		}
+	}
+}
+
+func TestAnUnnamedFormFallsBackToItsID(t *testing.T) {
+	if got := Name("godzilla"); got != "godzilla" {
+		t.Errorf("Name gave %q, want the id back", got)
+	}
+}
+
+func TestEveryStateHasASpanishNameThatFitsTheCard(t *testing.T) {
+	// The card centres the state in nine columns and adds a sparkle to the
+	// freshest one, so a long word would be cut in half on screen.
+	const cardWidth = 9
+	for _, v := range Vitals {
+		name := Names[v.Label]
+		if name == "" {
+			t.Errorf("the state %q has no Spanish name", v.Label)
+			continue
+		}
+		width := len([]rune(name))
+		if v.Sparkle {
+			width += 2 // " ✦"
+		}
+		if width > cardWidth {
+			t.Errorf("%q is %d columns on the card, which holds %d",
+				name, width, cardWidth)
+		}
+	}
+}
+
+func TestAFutureFeedTimeDoesNotLockTheBowl(t *testing.T) {
+	// A clock put forward once, or a hand-edited pet.json, used to leave
+	// /feed refusing until real time caught up. The daily counter this
+	// replaced could not do that: midnight always came.
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	s := New()
+	s.FedAt = now.Add(72 * time.Hour).Unix()
+
+	if !Feed(s, "feed", "", now) {
+		t.Error("a fed_at in the future locked the bowl")
+	}
+	if left := Waiting(s, "feed", now); left > FeedCooldown {
+		t.Errorf("wait of %v, longer than the cooldown itself", left)
+	}
+}
+
+func TestTheCooldownStillBindsAfterTheFix(t *testing.T) {
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	s := New()
+	if !Feed(s, "feed", "", now) {
+		t.Fatal("the first feed was refused")
+	}
+	if Feed(s, "feed", "", now.Add(3*time.Hour)) {
+		t.Error("it ate again three hours in, cooldown is four")
+	}
+	if !Feed(s, "feed", "", now.Add(4*time.Hour+time.Second)) {
+		t.Error("it refused after the four hours were up")
+	}
+}

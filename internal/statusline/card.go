@@ -25,11 +25,20 @@ type Card struct {
 	Bubble string
 	Facts  *session.Facts
 
-	Form   string
-	Level  int
-	XP     int
-	NextXP int
-	Vital  pet.Vital
+	// Form, State and Mark are what a person READS - the canvas's Spanish, not
+	// the English ids pet.json stores. Vital comes along for what is not text:
+	// the colour band 4 paints the state in.
+	Form  string
+	State string
+	Level int
+	Vital pet.Vital
+
+	// The bar in band 4: Done out of Span. What the two mean depends on where
+	// the pet is - the stretch of XP up to the next level while there is one,
+	// the habit that opens the next mark once there is not - and Mark says
+	// which of the two it is: empty for XP, the mark's name for a habit.
+	Done, Span int
+	Mark       string
 }
 
 // book applies the side effects on pet.json. A failure here must never take the
@@ -127,7 +136,7 @@ func RenderCard(p *Payload, facts session.Facts, rate rateFacts, newTurn, bubble
 		}
 	}
 
-	head := label
+	head := pet.Name(label)
 	if vital.Sparkle {
 		head += " ✦"
 	}
@@ -140,9 +149,15 @@ func RenderCard(p *Payload, facts session.Facts, rate rateFacts, newTurn, bubble
 	out.Rows[0] = theme.Centre(head, painted, cardWidth)
 	copy(out.Rows[1:], rows[:])
 
-	out.Form, out.Level, out.XP, out.Vital = form, level, s.XP, vital
-	if next, ok := pet.NextThreshold(s.XP); ok {
-		out.NextXP = next
+	out.Form, out.State = pet.Name(form), pet.Name(vital.Label)
+	out.Level, out.Vital = level, vital
+	// While there is a level above, the bar is XP. At the top it swaps to the
+	// habit that opens the next mark, which is the only progress left; a pet
+	// already wearing its mark has neither, and band 4 leans on the state.
+	if done, span, ok := pet.LevelProgress(s.XP); ok {
+		out.Done, out.Span = done, span
+	} else if mark, ok := pet.NextMark(s, form); ok {
+		out.Done, out.Span, out.Mark = mark.Done, mark.Threshold, pet.Name(mark.Form)
 	}
 
 	if bubbleAllowed {

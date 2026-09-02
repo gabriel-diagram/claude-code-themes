@@ -14,8 +14,9 @@ en un árbol de cinco niveles, con XP, hambre y racha.
 ![La statusline de cuatro bandas con el bicho a la derecha](assets/statusline.png)
 
 *Las cuatro bandas del tema **Terminal**, en una sesión de verdad. A la derecha
-el bicho: `exterminator`, nivel 5, y encima su estado. Cuatro filas de terminal,
-contando la raya.*
+el bicho: `exterminador`, nivel 5, y encima su estado. Cuatro filas de terminal,
+contando la raya. **La captura es anterior al cambio de nombres**: hoy la banda
+4 lleva además el estado y todo sale en castellano.*
 
 ![Electric Blue (izquierda) y Blood Red (derecha) en Claude Code](assets/preview.png)
 
@@ -165,10 +166,10 @@ menor prioridad antes que hacer *wrap* (que descuadra la caja del prompt):
 
 ```
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────
- Opus 5  ██████░░░░░░░░░░ 36% · 1M ctx │ xhigh                                                    lively
-rochas-energy-backend │ +184/−37 │ $28.29                                                         ▗▟┼█┼▙▖
+ Opus 5  ██████░░░░░░░░░░ 36% · 1M ctx │ xhigh                                                   vibrante 
+rochas-energy-backend │ +184/−37 │ $28.29                                                         ▗▟┼█┼▙▖ 
 api │ 5h ████░░░░░░ 41%  7d █░░░░░░░░░ 13% │ 1h 12m                                              ▐█ > < █▌
-refactor nivel 4 █████░░░░░░░ │ ◗ cinco días de racha. mañana no me falles.                       ▘▝▜█▛▝▘
+refactor nivel 4 █████░░░░░░░ vibrante │ ◗ cinco días de racha. mañana no me falles.              ▘▝▜█▛▝▘ 
 ```
 
 - **Banda 1 · motor** — modelo, contexto, razonamiento y ritmo: lo que cambia
@@ -198,11 +199,19 @@ el propio Claude Code: aquello es suyo y no se puede tocar.
   gris. De la ruta sale **solo la carpeta en la que estás**, no el camino entero;
   y si se llama igual que el repo —- es decir, estás en su raíz—- desaparece,
   porque eso ya lo dice la banda 2.
-- **Banda 4 · el bicho** — quién es, cuánto lleva y lo que tenga que decir:
-  oficio, nivel, barra de xp y bocadillo. Cómo está **no** va aquí: la etiqueta
-  de estado ya corona la tarjeta, y dos veces en el mismo pie se lee como un
-  fallo. Por debajo de **100 columnas** esta banda se cae y queda solo el
-  oficio — y entonces la etiqueta de la tarjeta es la única que lo dice.
+- **Banda 4 · el bicho** — quién es, cuánto lleva, cómo está y lo que tenga que
+  decir: **oficio, nivel, barra, estado y bocadillo**. El estado sale aquí
+  además de coronar la tarjeta, que es lo que dibuja el lienzo y no la
+  duplicación que parece: la tarjeta es lo primero que se cae al estrechar la
+  terminal, y esta copia es la que aguanta.
+
+  La barra mide **el tramo de este nivel**, no la xp total, así que amanece
+  vacía el día después de subir. En el tope, donde ya no queda escalera, cambia
+  de moneda: pasa a medir el **hábito** que abre la siguiente marca, en ámbar y
+  con su nombre al lado. Un bicho que ya lleva la suya no tiene ninguna de las
+  dos, y entonces la banda se sostiene sobre el estado.
+
+  Por debajo de **100 columnas** se cae entera y queda solo el oficio.
 
 Cuatro bandas contra cuatro filas de tarjeta —la etiqueta de estado y las tres
 del bicho—, más la raya: **cinco filas en total**. Antes eran siete: el bicho
@@ -264,9 +273,9 @@ El bocadillo de la banda 4 no es un chat: **por defecto calla**.
   en ese orden. Las cuatro frases de evento las dice cualquier bicho; para una
   comida grande abre el **repertorio de su oficio**, y cada uno tiene el suyo:
 
-  > `bughunter` ◗ el bug no era el código, era el jueves
-  > `marathon` ◗ esto ya no es una sesión, es un piso compartido
-  > `feral` ◗ he tocado prod. tranquilo. era el seed.
+  > `cazabugs` ◗ el bug no era el código, era el jueves
+  > `maratón` ◗ esto ya no es una sesión, es un piso compartido
+  > `salvaje` ◗ he tocado prod. tranquilo. era el seed.
 
   Los tres temperamentos, las catorce marcas y las dos secretas no tienen
   repertorio propio: solo dicen las compartidas.
@@ -274,8 +283,12 @@ El bocadillo de la banda 4 no es un chat: **por defecto calla**.
   hasta agotar el repertorio.
 - **Una cada cinco minutos**, como mucho.
 
-Habla en castellano aunque sus formas se llamen `bughunter` y `sniper`: es su
-voz, no su API, y la mitad son chistes que no cruzan traducidos.
+Habla en castellano, y desde el rediseño se llama en castellano también:
+`cazabugs`, `francotirador`, `vibrante`. Los nombres ingleses siguen ahí, pero
+como **ids** — es lo que hay escrito en el `pet.json` de todo el mundo desde la
+versión en Python, y renombrarlos reescribiría todos los ficheros de vida que
+hay por ahí. La traducción vive en `internal/pet/names.go`; una forma sin
+entrada cae en su propio id.
 
 A 1 fps, unas patas alternando sin parar en la esquina del ojo cansan, así que
 **por defecto anda cuatro segundos de cada doce**. `STATUSLINE_PET_WALK=1`
@@ -288,7 +301,7 @@ llevan por la rama metódica, los tests y los planes por la inquisitiva, y
 reventar el contexto por la impulsiva.
 
 ```
-spark -> pattern / probe / ember -> siete oficios -> catorce marcas
+chispa -> pauta / sonda / brasa -> siete oficios -> catorce marcas
 ```
 
 ```bash
@@ -439,11 +452,13 @@ El proyecto pasó de Python a Go, y el código, las claves de
 `~/.claude/pet.json` y los nombres de las 27 formas pasaron a inglés. **No hay
 que hacer nada**: `scripts/install.sh` borra los ficheros
 sueltos que la versión vieja dejaba en `~/.claude/`, y el `pet.json` se traduce
-solo la primera vez que se escribe — xp, racha, contadores y forma secreta
-incluidos. `spark` es ahora `spark`, `bughunter` es `bughunter`, `hambre` es
-`hunger`. El bicho conserva xp, racha, contadores y forma secreta: los tres
-lanzadores viejos que la versión de Python dejaba sueltos en `~/.claude/`
-(`statusline.sh`, `bicho.py`, `pet`, `pet-hook.sh`) los borra el instalador.
+solo la primera vez que se escribe. Eso traduce las **claves** del fichero
+(`hambre` pasó a `hunger`) y los ids de las formas (`chispa` pasó a `spark`);
+lo que lees en pantalla volvió al castellano con el rediseño, pero el fichero
+sigue guardando los ids. El bicho conserva xp, racha, contadores y forma
+secreta. Los tres lanzadores viejos que la versión de Python dejaba sueltos en
+`~/.claude/` (`statusline.sh`, `bicho.py`, `pet`, `pet-hook.sh`) los borra el
+instalador.
 
 Lo único que hay que cambiar a mano son las variables de entorno, si las tenías
 puestas: `STATUSLINE_PET` → `STATUSLINE_PET`, `STATUSLINE_PET_WALK` →

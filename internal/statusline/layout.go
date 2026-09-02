@@ -8,7 +8,7 @@ import (
 	"github.com/gabriel-diagram/claude-code-themes/internal/theme"
 )
 
-// How the three bands are packed into the columns we actually have. Each band
+// How the four bands are packed into the columns we actually have. Each band
 // drops its lowest-priority elements rather than wrap, because wrapping knocks
 // the prompt box out of square.
 

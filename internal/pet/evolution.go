@@ -102,6 +102,93 @@ func NextThreshold(xp int) (int, bool) {
 	return 0, false
 }
 
+// LevelProgress is how far INTO the current level the XP has come: how much of
+// this level's stretch is done, and how long the stretch is.
+//
+// It measures the stretch and not the running total on purpose. Against the
+// total, a bar is never empty the morning after a level-up - level 2 opens at
+// a third full, levels 3 and 4 at just under a half - which reads as progress
+// nobody made. Against the stretch it opens at zero and closes full.
+//
+// At the top there is no stretch left, and ok is false.
+func LevelProgress(xp int) (done, span int, ok bool) {
+	// pet.json is user-writable and a hand-edited negative reads as a newborn,
+	// not as a bar running backwards.
+	if xp < 0 {
+		xp = 0
+	}
+	next, has := NextThreshold(xp)
+	if !has {
+		return 0, 0, false
+	}
+	base := 0
+	for _, l := range Levels {
+		if l.XP <= xp {
+			base = l.XP
+		}
+	}
+	return xp - base, next - base, true
+}
+
+// Mark is a level-5 mark within reach: the form it opens, the habit it asks
+// for, and how far that habit has come.
+type Mark struct {
+	Form      string
+	Counter   string
+	Done      int
+	Threshold int
+}
+
+// Share is how much of the habit is done, from 0 to 1.
+func (m Mark) Share() float64 {
+	if m.Threshold <= 0 {
+		return 0
+	}
+	return float64(m.Done) / float64(m.Threshold)
+}
+
+// NextMark is the mark the pet is closest to wearing.
+//
+// This is what progress becomes once the XP runs out. The canvas: "las
+// ramificaciones no dependen de la XP sino del hábito". A pet at the top of
+// the ladder still has somewhere to go, and the habit is the only thing left
+// that still moves - so it is the habit the bar measures.
+//
+// Closest is the largest share of the habit done, and a tie falls back to the
+// order the design lists the siblings in, which is the tie-break CurrentForm
+// already uses. A pet that wears a mark, or a secret, has nothing left to
+// reach and gets false.
+//
+// form is the pet's current form: every caller has just worked it out with
+// CurrentForm, and asking for it keeps this from walking the tree a second
+// time on every refresh - and from disagreeing with the form on screen.
+func NextMark(s *State, form string) (Mark, bool) {
+	if _, worn := Unlocks[form]; worn {
+		return Mark{}, false
+	}
+
+	var best Mark
+	found := false
+	for _, kid := range Tree[form] {
+		u, ok := Unlocks[kid]
+		if !ok || u.Threshold <= 0 {
+			continue
+		}
+		done := s.Counters[u.Counter]
+		if done < 0 {
+			done = 0
+		}
+		if done > u.Threshold {
+			done = u.Threshold
+		}
+		candidate := Mark{Form: kid, Counter: u.Counter, Done: done, Threshold: u.Threshold}
+		if !found || candidate.Share() > best.Share() {
+			best, found = candidate, true
+		}
+	}
+	return best, found
+}
+
 // topBranch picks between siblings: the highest counter wins, and a tie falls
 // back to the order the design lists them in.
 func topBranch(s *State, candidates []string) string {
@@ -116,13 +203,20 @@ func topBranch(s *State, candidates []string) string {
 }
 
 // CurrentForm walks the tree from the root as far as XP and habits allow.
+//
+// A secret is a level-5 form and waits for level 5 like every other one. Its
+// CONDITION is met earlier - the chimera's is "dos temperamentos empatados al
+// subir a nivel 4" - and that is the whole point of the canvas drawing a pet
+// that reads "refactor · nivel 4" with "488 para quimera" underneath: the
+// secret is won and the XP is what is still missing. Handing it over on the
+// spot skipped level 4 whole and put a level 5 next to 412 XP.
 func CurrentForm(s *State) (string, int) {
-	if s.Secret != "" {
+	level := LevelFor(s.XP)
+	if level >= 5 && s.Secret != "" {
 		if _, ok := Sprites[string(s.Secret)]; ok {
 			return string(s.Secret), 5
 		}
 	}
-	level := LevelFor(s.XP)
 	here := Root
 	if level >= 2 {
 		here = topBranch(s, Tree[Root])

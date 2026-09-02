@@ -96,7 +96,7 @@ func runSetup(args []string) int {
 	case "uninstall":
 		err = setup.Uninstall(os.Stdout)
 	default:
-		fmt.Fprintln(os.Stderr, "usage: ccpet setup {on|off|status|install|install-hooks|uninstall} [root]")
+		fmt.Fprintln(os.Stderr, "uso: ccpet setup {on|off|status|install|install-hooks|uninstall} [raíz]")
 		return 2
 	}
 	if err != nil {
@@ -113,22 +113,22 @@ func defaultRuntimeRoot() string {
 	return filepath.Join(setup.ConfigDir(), "ccpet")
 }
 
-const usage = `ccpet - the Terminal theme's statusline and its pet.
+const usage = `ccpet - la statusline del tema Terminal y su bicho.
 
-  ccpet                       the pet's panel
-  ccpet feed                  feed it (+3 xp, -2 hunger, 4 a day)
-  ccpet <event>               a meal: tests | commit | compact | task | overflow
-  ccpet count <counter> [n]   add to a behaviour counter
-  ccpet day <name>            count consecutive days, not occurrences
-  ccpet record <counter> <n>  keep a counter's maximum
-  ccpet session <file>        close a session: its facts become counters
+  ccpet                       el panel del bicho
+  ccpet feed                  darle de comer (+3 xp, -2 hambre, uno cada 4 h)
+  ccpet <evento>              una comida: tests | commit | compact | task | overflow
+  ccpet count <contador> [n]  suma a un contador de comportamiento
+  ccpet day <nombre>          cuenta días SEGUIDOS, no veces
+  ccpet record <contador> <n> guarda el máximo de un contador
+  ccpet session <fichero>     cierra una sesión: sus datos pasan a contadores
 
-  ccpet statusline            render one refresh (payload on stdin)
-  ccpet hook                  handle one hook event (payload on stdin)
+  ccpet statusline            pinta un refresco (payload por stdin)
+  ccpet hook                  atiende un evento de hook (payload por stdin)
 
-  ccpet link                  point ~/.claude/ccpet at this plugin
-  ccpet setup on|off|status   turn the statusline on or off in settings.json
-  ccpet setup install         the no-plugin install (add -hooks for the hooks)
-  ccpet setup uninstall       undo it
-  ccpet version               print the version
+  ccpet link                  apunta ~/.claude/ccpet a este plugin
+  ccpet setup on|off|status   enciende o apaga la statusline en settings.json
+  ccpet setup install         instalación sin plugin (install-hooks incluye los hooks)
+  ccpet setup uninstall       deshacerlo
+  ccpet version               imprime la versión
 `
