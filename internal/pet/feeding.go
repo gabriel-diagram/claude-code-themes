@@ -10,13 +10,19 @@ const (
 	HungerWarn = 7
 )
 
-// Food is one meal's effect. Cap of 0 means no daily cap.
+// FeedCooldown is how long /feed makes you wait. The design canvas calls it
+// "un tiro al plato · una vez cada cuatro horas": a cooldown, not a daily
+// counter, which is the same clock hunger already runs on.
+const FeedCooldown = 4 * time.Hour
+
+// Food is one meal's effect. A Cooldown of 0 means you can eat it whenever the
+// thing that earns it happens.
 type Food struct {
-	XP     int
-	Hunger int
-	Cap    int
-	Label  string
-	Habits []string
+	XP       int
+	Hunger   int
+	Cooldown time.Duration
+	Label    string
+	Habits   []string
 }
 
 // Foods, by event name.
@@ -25,9 +31,13 @@ var Foods = map[string]Food{
 	"commit":   {12, -3, 0, "commit", []string{"methodical", "diffs", "diff_streak"}},
 	"compact":  {8, -3, 0, "compact", []string{"methodical"}},
 	"task":     {6, -1, 0, "plan task", []string{"inquisitive", "plans"}},
-	"feed":     {3, -2, 4, "/feed", nil},
+	"feed":     {3, -2, FeedCooldown, "/feed", nil},
 	"overflow": {-15, 0, 0, "context maxed", []string{"impulsive", "ctx_maxed"}},
 }
+
+// BigMeal is what the pet considers worth talking about: a green suite or a
+// commit, not a compact or a hand-feed. See speech.go.
+func BigMeal(event string) bool { return Foods[event].XP >= 12 }
 
 // streaksBrokenBy: a clean streak breaks when you blow the context.
 var streaksBrokenBy = map[string][]string{
@@ -66,11 +76,12 @@ func Feed(s *State, event, note string, now time.Time) bool {
 	if s.LogDay != day {
 		s.LogDay = day
 		s.Log = s.Log[:0]
-		s.FedToday = 0
 	}
-	// The daily cap keeps its own counter: the log is capped at LogMax entries,
-	// so counting over it would blow past the cap as soon as it rotates.
-	if food.Cap > 0 && s.FedToday >= food.Cap {
+	// The cooldown keeps its own timestamp: the log is capped at LogMax entries
+	// and cleared daily, so reading the last meal out of it would forget a
+	// feed at 23:00 the moment midnight passed.
+	if food.Cooldown > 0 && s.FedAt != 0 &&
+		now.Sub(time.Unix(s.FedAt, 0)) < food.Cooldown {
 		return false
 	}
 
@@ -89,8 +100,8 @@ func Feed(s *State, event, note string, now time.Time) bool {
 	if food.XP > 0 {
 		s.LastFed = now.Unix()
 	}
-	if food.Cap > 0 {
-		s.FedToday++
+	if food.Cooldown > 0 {
+		s.FedAt = now.Unix()
 	}
 
 	if s.LastDay != day {
@@ -132,6 +143,19 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return string(r[:n])
+}
+
+// Waiting is how long is left on a food's cooldown, or 0 if it can eat now.
+func Waiting(s *State, event string, now time.Time) time.Duration {
+	food, ok := Foods[event]
+	if !ok || food.Cooldown == 0 || s.FedAt == 0 {
+		return 0
+	}
+	left := food.Cooldown - now.Sub(time.Unix(s.FedAt, 0))
+	if left < 0 {
+		return 0
+	}
+	return left
 }
 
 // CheckSecrets looks for the two level-5 forms that are not on the tree. Called

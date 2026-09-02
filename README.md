@@ -1,7 +1,7 @@
 # claude-code-themes
 
 Tres temas de color para la CLI de [Claude Code](https://claude.com/claude-code)
-más una **statusline** de tres bandas con un bicho a la derecha que refleja el
+más una **statusline** de cuatro bandas con un bicho a la derecha que refleja el
 estado real de la sesión — y que **evoluciona** según cómo trabajas: 27 formas
 en un árbol de cinco niveles, con XP, hambre y racha.
 
@@ -11,11 +11,17 @@ en un árbol de cinco niveles, con XP, hambre y racha.
 | **Blood Red** | `#ff5c47` coral | cálido: coral, terracota, vino sobre fondo oscuro |
 | **Electric Blue** | `#2e8bff` azul | frío: cian, azure, azul profundo sobre fondo oscuro |
 
+![La statusline de cuatro bandas con el bicho a la derecha](assets/statusline.png)
+
+*Las cuatro bandas del tema **Terminal**, en una sesión de verdad. A la derecha
+el bicho: `exterminator`, nivel 5, y encima su estado. Cuatro filas de terminal,
+contando la raya.*
+
 ![Electric Blue (izquierda) y Blood Red (derecha) en Claude Code](assets/preview.png)
 
-*Izquierda: **Electric Blue** (prompts, picker y selección en azul). Derecha:
-**Blood Red** (prompts coral y la statusline de 3 líneas con el indicador de vida
-de sesión).*
+*Los otros dos temas: **Electric Blue** a la izquierda (prompts, picker y
+selección en azul) y **Blood Red** a la derecha (prompts coral). La statusline
+de esa captura es la vieja, de tres bandas.*
 
 ## Contenido
 
@@ -153,18 +159,16 @@ colgando.
 
 Es un **pie**, no una banda más: fondo un tono por encima del negro y una raya
 fina arriba, para que se lea como parte de la ventana y no como una línea más
-del hilo. Tres bandas a la izquierda y el bicho anclado a la derecha. Cada banda
-agrupa datos que se miran juntos, y suelta los elementos de menor prioridad
-antes que hacer *wrap* (que descuadra la caja del prompt):
+del hilo. Cuatro bandas a la izquierda y el bicho anclado a la derecha, en tres
+filas. Cada banda agrupa datos que se miran juntos, y suelta los elementos de
+menor prioridad antes que hacer *wrap* (que descuadra la caja del prompt):
 
 ```
-──────────────────────────────────────────────────────────────────────────────
- Opus 5  ██████░░░░░░░░░░ 36% · 1M ctx │ xhigh │ 42.7 tok/s │ bypass     lively
-rochas-energy-backend (fix-errors ✳) │ +184/−37 │ $28.29                |   |
-api │ 5h ████░░░░░░ 41%  7d █░░░░░░░░░ 13% │ 1h 12m                   ▗█┼█┼█▖
-                                                                     ▐█ > < █▌
-                                                                      ▝█┼█┼█▘
-▐█ > < █▌◗ racha de 5 días. no la rompas hoy                          ▝▝   ▘▘
+──────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Opus 5  ██████░░░░░░░░░░ 36% · 1M ctx │ xhigh                                                    lively
+rochas-energy-backend │ +184/−37 │ $28.29                                                         ▗▟┼█┼▙▖
+api │ 5h ████░░░░░░ 41%  7d █░░░░░░░░░ 13% │ 1h 12m                                              ▐█ > < █▌
+refactor nivel 4 █████░░░░░░░ │ ◗ cinco días de racha. mañana no me falles.                       ▘▝▜█▛▝▘
 ```
 
 - **Banda 1 · motor** — modelo, contexto, razonamiento y ritmo: lo que cambia
@@ -194,26 +198,38 @@ el propio Claude Code: aquello es suyo y no se puede tocar.
   gris. De la ruta sale **solo la carpeta en la que estás**, no el camino entero;
   y si se llama igual que el repo —- es decir, estás en su raíz—- desaparece,
   porque eso ya lo dice la banda 2.
-- **El bocadillo** cierra el pie. Quien habla lo dice la cara del propio bicho,
-  con la cola apuntando al texto; sale solo cuando hay algo que decir y solo a
-  partir de 100 columnas.
+- **Banda 4 · el bicho** — quién es, cuánto lleva y lo que tenga que decir:
+  oficio, nivel, barra de xp y bocadillo. Cómo está **no** va aquí: la etiqueta
+  de estado ya corona la tarjeta, y dos veces en el mismo pie se lee como un
+  fallo. Por debajo de **100 columnas** esta banda se cae y queda solo el
+  oficio — y entonces la etiqueta de la tarjeta es la única que lo dice.
 
-Las tres bandas van dentro de la columna izquierda, contra la tarjeta del bicho:
-seis filas en total, más la raya. Por debajo de 55 columnas el bicho desaparece y
-quedan las tres bandas solas.
+Cuatro bandas contra cuatro filas de tarjeta —la etiqueta de estado y las tres
+del bicho—, más la raya: **cinco filas en total**. Antes eran siete: el bicho
+ocupaba cinco filas propias y el bocadillo una más. Por debajo de 55 columnas el
+bicho desaparece y quedan las tres bandas de datos solas.
 
 ### El bicho
 
-Nueve columnas por cinco filas. La silueta la elige la **evolución**; los ojos,
-las patas y el color los elige el **estado**.
+Nueve columnas. La silueta la elige la **evolución**; los ojos, las patas y el
+color los elige el **estado**. Y viene en dos tallas: **cinco filas** en `/pet` y
+en la galería de evoluciones, donde sobra sitio, y **tres** en la statusline,
+donde dos filas de terminal valen más que una cresta.
 
 ```
   |   |     <- marca de la ramificación (se cae al llegar a tired)
- ▗█┼█┼█▖    <- cuerpo de la evolución
+ ▗▟┼█┼▙▖    <- cuerpo de la evolución
 ▐█ > < █▌   <- cara, con las orejas fuera
- ▝█┼█┼█▘
+ ▝▜┼█┼▛▘
  ▘▘   ▝▝    <- patas
+
+ ▗▟┼█┼▙▖    la de tres filas: se va la cresta, y el contorno de abajo
+▐█ > < █▌   se estrecha para meter las patas dentro. Sigue andando
+ ▘▝▜█▛▝▘    (`▘▝…▝▘` ↔ `▝▘…▘▝`), se hunde (`▖▗…▗▖`) y se tumba (`▄▄▀▀▀▄▄`).
 ```
+
+Las formas se distinguen por el **cuerpo**, que es lo que la talla corta
+conserva: `▗▟┼█┼▙▖` no es `▗▟███▙▖` ni `▟███████▙`.
 
 Siete estados, y **cuatro señales independientes** que cambian en este orden: los
 ojos, luego el paso de las patas, luego la cabeza se hunde y al final la silueta
@@ -239,6 +255,28 @@ parpadeo (`_ _`) es un solo frame cada siete refrescos. Al cruzar un umbral la
 etiqueta sale en negrita un refresco — para eso guarda el estado anterior en
 `$TMPDIR/claude-statusline-<session_id>`.
 
+### Lo que dice
+
+El bocadillo de la banda 4 no es un chat: **por defecto calla**.
+
+- **Primero el evento, luego la forma.** Habla cuando pasa algo —subida de
+  nivel, contexto reventado, hambre ≥7, una comida grande, la racha en juego— y
+  en ese orden. Las cuatro frases de evento las dice cualquier bicho; para una
+  comida grande abre el **repertorio de su oficio**, y cada uno tiene el suyo:
+
+  > `bughunter` ◗ el bug no era el código, era el jueves
+  > `marathon` ◗ esto ya no es una sesión, es un piso compartido
+  > `feral` ◗ he tocado prod. tranquilo. era el seed.
+
+  Los tres temperamentos, las catorce marcas y las dos secretas no tienen
+  repertorio propio: solo dicen las compartidas.
+- **Sin repetir.** Las tres últimas frases viven en `pet.json` y no vuelven
+  hasta agotar el repertorio.
+- **Una cada cinco minutos**, como mucho.
+
+Habla en castellano aunque sus formas se llamen `bughunter` y `sniper`: es su
+voz, no su API, y la mitad son chistes que no cruzan traducidos.
+
 A 1 fps, unas patas alternando sin parar en la esquina del ojo cansan, así que
 **por defecto anda cuatro segundos de cada doce**. `STATUSLINE_PET_WALK=1`
 devuelve el baile continuo del diseño.
@@ -255,7 +293,7 @@ spark -> pattern / probe / ember -> siete oficios -> catorce marcas
 
 ```bash
 /pet     # nivel, evolución, xp, hambre, racha y la comida de hoy
-/feed    # +3 xp, hambre −2 (máximo 4 al día)
+/feed    # +3 xp, hambre −2 (uno cada cuatro horas)
 ```
 
 El árbol entero, la tabla de comida y qué alimenta cada contador están en

@@ -54,6 +54,65 @@ func TestEveryStateDrawsFiveRowsOfTheCardWidth(t *testing.T) {
 	}
 }
 
+// designReference is the silhouette the canvas draws in artboard 09, the one it
+// gives the four compact states for.
+var designReference = Sprite{
+	Crest: "  \\   /  ", Upper: " ▗▟███▙▖ ", Face: "▐█     █▌",
+	Lower: " ▝▜███▛▘ ", Feet: "  ▘   ▝  ",
+	OwnEyes: [2]rune{'>', '<'}, EyeCols: [2]int{3, 5},
+}
+
+func TestCompactMatchesTheCanvas(t *testing.T) {
+	// The canvas gives one worked example and its four states. That example is
+	// the specification: if these four come out, the rule is right.
+	Sprites["_canvas"] = designReference
+	defer delete(Sprites, "_canvas")
+	t.Setenv("STATUSLINE_PET_WALK", "1")
+
+	fresh, tired, ko := Vitals[0], Vitals[4], KO
+	cases := []struct {
+		what string
+		v    Vital
+		step int
+		want string
+	}{
+		{"paso A", fresh, 0, " ▘▝▜█▛▝▘ "},
+		{"paso B", fresh, 1, " ▝▘▜█▛▘▝ "},
+		{"hundida", tired, 0, " ▖▗▜█▛▗▖ "},
+		{"k.o.", ko, 0, " ▄▄▀▀▀▄▄ "},
+	}
+	for _, tc := range cases {
+		got := strip(DrawCompact("_canvas", tc.v, tc.step, false)[2])
+		if got != tc.want {
+			t.Errorf("%s\n  motor  |%s|\n  lienzo |%s|", tc.what, got, tc.want)
+		}
+	}
+	// And the two rows above it.
+	rows := DrawCompact("_canvas", fresh, 0, false)
+	if strip(rows[0]) != " ▗▟███▙▖ " {
+		t.Errorf("fila 1 = |%s|", strip(rows[0]))
+	}
+	if strip(rows[1]) != "▐█ > < █▌" {
+		t.Errorf("fila 2 = |%s|", strip(rows[1]))
+	}
+}
+
+func TestCompactIsAlwaysThreeRowsOfTheCardWidth(t *testing.T) {
+	for name := range Sprites {
+		for _, v := range Vitals {
+			for step := 0; step < 14; step++ {
+				rows := DrawCompact(name, v, step, false)
+				for i, row := range rows {
+					if n := len([]rune(strip(row))); n != SpriteWidth {
+						t.Fatalf("%s/%s step %d row %d: %d runes |%s|",
+							name, v.Label, step, i, n, strip(row))
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestAnUnknownFormFallsBackToTheRoot(t *testing.T) {
 	if Draw("godzilla", Vitals[0], 0, false) != Draw(Root, Vitals[0], 0, false) {
 		t.Error("an unknown form did not fall back to the root")
@@ -283,35 +342,45 @@ func TestXPNeverGoesNegative(t *testing.T) {
 	}
 }
 
-func TestTheDailyCapOnlyBindsTheHandFed(t *testing.T) {
+func TestTheCooldownOnlyBindsTheHandFed(t *testing.T) {
+	// "un tiro al plato · una vez cada cuatro horas": /feed waits, the meals
+	// you earn do not.
 	s := New()
-	for i := 0; i < 4; i++ {
-		if !Feed(s, "feed", "", t0.Add(time.Duration(i)*time.Second)) {
-			t.Fatalf("feed %d was refused", i)
-		}
+	if !Feed(s, "feed", "", t0) {
+		t.Fatal("the first feed was refused")
 	}
-	if Feed(s, "feed", "", t0.Add(5*time.Second)) {
-		t.Error("the cap did not bind")
+	if Feed(s, "feed", "", t0.Add(FeedCooldown-time.Minute)) {
+		t.Error("fed again inside the cooldown")
 	}
-	if s.XP != 12 {
-		t.Errorf("xp = %d", s.XP)
+	if !Feed(s, "feed", "", t0.Add(FeedCooldown)) {
+		t.Error("still refused once the cooldown was up")
+	}
+	if s.XP != 6 {
+		t.Errorf("xp = %d, want 6", s.XP)
+	}
+	// A green suite in the middle is not held back by it.
+	if !Feed(s, "tests", "", t0.Add(FeedCooldown+time.Minute)) {
+		t.Error("tests were refused by the feed cooldown")
 	}
 }
 
-func TestTheCapSurvivesARotatingLog(t *testing.T) {
-	// The log is capped at LogMax, so counting over it would let the cap slip
-	// as soon as it rotates.
+func TestTheCooldownSurvivesMidnight(t *testing.T) {
+	// The log is cleared daily, so reading the last meal out of it would forget
+	// a feed at 23:30 the moment the date rolled over.
+	s := New()
+	lateNight := time.Date(2026, 9, 1, 23, 30, 0, 0, time.Local)
+	if !Feed(s, "feed", "", lateNight) {
+		t.Fatal("the first feed was refused")
+	}
+	if Feed(s, "feed", "", lateNight.Add(90*time.Minute)) {
+		t.Error("midnight reset the cooldown")
+	}
+}
+
+func TestTheLogStaysCapped(t *testing.T) {
 	s := New()
 	for i := 0; i < 50; i++ {
 		Feed(s, "tests", "", t0.Add(time.Duration(i)*time.Second))
-	}
-	for i := 0; i < 4; i++ {
-		if !Feed(s, "feed", "", t0.Add(time.Duration(100+i)*time.Second)) {
-			t.Fatalf("feed %d refused", i)
-		}
-	}
-	if Feed(s, "feed", "", t0.Add(200*time.Second)) {
-		t.Error("the cap slipped once the log rotated")
 	}
 	if len(s.Log) > LogMax {
 		t.Errorf("log has %d entries", len(s.Log))
@@ -640,3 +709,91 @@ func strip(s string) string {
 	}
 	return string(out)
 }
+
+// --- what it says -----------------------------------------------------------
+
+func TestSilenceByDefault(t *testing.T) {
+	s := New()
+	if line := Speak(s, EventNothing, "refactor", t0, first); line != "" {
+		t.Errorf("spoke without an event: %q", line)
+	}
+}
+
+func TestTheCooldownGagsIt(t *testing.T) {
+	s := New()
+	if Speak(s, EventBigMeal, "refactor", t0, first) == "" {
+		t.Fatal("said nothing on a big meal")
+	}
+	if line := Speak(s, EventBigMeal, "refactor", t0.Add(SpeechCooldown-time.Second), first); line != "" {
+		t.Errorf("spoke inside the cooldown: %q", line)
+	}
+	if Speak(s, EventBigMeal, "refactor", t0.Add(SpeechCooldown), first) == "" {
+		t.Error("still silent once the cooldown was up")
+	}
+}
+
+func TestItDoesNotRepeatItself(t *testing.T) {
+	s := New()
+	said := map[string]bool{}
+	at := t0
+	for i := 0; i < len(Repertoire["refactor"]); i++ {
+		line := Speak(s, EventBigMeal, "refactor", at, first)
+		if line == "" {
+			t.Fatalf("silent on round %d", i)
+		}
+		if said[line] {
+			t.Errorf("repeated %q before exhausting the repertoire", line)
+		}
+		said[line] = true
+		at = at.Add(SpeechCooldown)
+	}
+	if len(s.Said) != SaidMemory {
+		t.Errorf("remembers %d lines, want %d", len(s.Said), SaidMemory)
+	}
+	// Exhausted: it starts over rather than going mute.
+	if Speak(s, EventBigMeal, "refactor", at, first) == "" {
+		t.Error("went mute once the repertoire ran out")
+	}
+}
+
+func TestAFormWithNoRepertoireOnlySaysTheSharedLines(t *testing.T) {
+	// The fourteen marks and the two secrets have no voice of their own.
+	if _, ok := Repertoire["surgeon"]; ok {
+		t.Fatal("surgeon was given a repertoire; this test needs one without")
+	}
+	s := New()
+	if line := Speak(s, EventBigMeal, "surgeon", t0, first); line != "" {
+		t.Errorf("invented a line for a form with no repertoire: %q", line)
+	}
+	s = New()
+	s.XP = 400
+	if line := Speak(s, EventLevelUp, "surgeon", t0, first); line != "nivel 4. ya soy alguien." {
+		t.Errorf("level-up line = %q", line)
+	}
+}
+
+func TestTheSharedLinesCarryTheirNumber(t *testing.T) {
+	s := New()
+	s.Streak = 5
+	if line := Speak(s, EventStreak, "surgeon", t0, first); line != "cinco días de racha. mañana no me falles." {
+		t.Errorf("streak line = %q", line)
+	}
+	s = New()
+	s.Streak = 11
+	if line := Speak(s, EventStreak, "surgeon", t0, first); line != "11 días de racha. mañana no me falles." {
+		t.Errorf("big streak line = %q", line)
+	}
+}
+
+func TestEveryFormWithARepertoireHasThreeLines(t *testing.T) {
+	for name, lines := range Repertoire {
+		if len(lines) != 3 {
+			t.Errorf("%s has %d lines, the canvas gives 3", name, len(lines))
+		}
+		if _, ok := Sprites[name]; !ok {
+			t.Errorf("%s has a repertoire but no sprite", name)
+		}
+	}
+}
+
+func first(int) int { return 0 }

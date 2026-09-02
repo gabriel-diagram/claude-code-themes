@@ -158,6 +158,50 @@ func work(p *Payload) []segment {
 	return out
 }
 
+// petBand is band 4, the pet's own line: who it is, how far along, and whatever
+// it has to say. The canvas puts it under the three data bands and alongside the
+// card, so the four rows on the left line up with the four on the right.
+//
+// How it feels is NOT here, even though the canvas draws it twice: the state
+// already sits on top of the card, and two "lively" on one footer read as a
+// bug. The card's copy is the one that stays, because below BubbleMin this band
+// shrinks to the trade name and that copy is then the only one left.
+//
+// Below BubbleMin columns it collapses to just the trade name - the canvas:
+// "con menos de 100 columnas se cae sola y solo queda el oficio".
+func petBand(c Card, columns int) []segment {
+	out := []segment{
+		seg(0, theme.Fg(theme.Path)+c.Form+theme.Reset).
+			truncatable(theme.Fg(theme.Path), c.Form),
+	}
+	if columns < BubbleMin {
+		return out
+	}
+
+	level := "nivel " + strconv.Itoa(c.Level)
+	out = append(out, seg(2,
+		theme.Fg(theme.Dim)+"nivel "+theme.Reset+
+			theme.Fg(theme.Emph)+strconv.Itoa(c.Level)+theme.Reset).
+		truncatable(theme.Fg(theme.Dim), level).withSep(" "))
+
+	if c.NextXP > 0 {
+		out = append(out, seg(3,
+			theme.Bar(float64(c.XP), float64(c.NextXP), xpBarWidth,
+				theme.Ident, theme.CtxEmpty)).withSep(" "))
+	}
+
+	if c.Bubble != "" {
+		out = append(out, seg(4,
+			theme.Fg(theme.Tail)+"◗"+theme.Reset+" "+
+				theme.Fg(theme.Text)+c.Bubble+theme.Reset).
+			truncatable(theme.Fg(theme.Text), c.Bubble))
+	}
+	return out
+}
+
+// xpBarWidth is the twelve cells the canvas draws in band 4.
+const xpBarWidth = 12
+
 func quota(p *Payload) []segment {
 	var out []segment
 	// If the folder is named like the repo you are at its root, and then it

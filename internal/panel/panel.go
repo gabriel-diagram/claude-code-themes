@@ -104,8 +104,13 @@ func eat(out io.Writer, statePath, event, note string, now time.Time) int {
 	pet.DecayHunger(s, now)
 	before, _ := pet.CurrentForm(s)
 	if !pet.Feed(s, event, note, now) {
-		fmt.Fprintf(out, "%salready at today's cap for %s%s\n",
-			theme.Fg(theme.Dim), event, theme.Reset)
+		if left := pet.Waiting(s, event, now); left > 0 {
+			fmt.Fprintf(out, "%sya ha comido. le toca en %s%s\n",
+				theme.Fg(theme.Dim), roughly(left), theme.Reset)
+		} else {
+			fmt.Fprintf(out, "%sno le entra %s ahora mismo%s\n",
+				theme.Fg(theme.Dim), event, theme.Reset)
+		}
 		return 0
 	}
 	pet.Save(s, statePath)
@@ -125,13 +130,43 @@ func eat(out io.Writer, statePath, event, note string, now time.Time) int {
 	return 0
 }
 
+// lineage is the path walked to get here, with the root swapped for the
+// temperament that chose the branch: the canvas writes "metódico › pauta ›
+// refactor", not "chispa › pauta › refactor". Everyone starts as a larva, so
+// saying so tells you nothing; the temperament does.
+func lineage(form string) []string {
+	trail := pet.Lineage(form)
+	if len(trail) > 1 {
+		if temperament, ok := pet.BranchBy[trail[1]]; ok {
+			trail[0] = temperament
+		}
+	}
+	return trail
+}
+
+// roughly spells a duration the way you would say it out loud.
+func roughly(d time.Duration) string {
+	if d < time.Minute {
+		return "menos de un minuto"
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%d min", int(d.Minutes()))
+	}
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	if minutes == 0 {
+		return fmt.Sprintf("%dh", hours)
+	}
+	return fmt.Sprintf("%dh %02dm", hours, minutes)
+}
+
 func showPanel(out io.Writer, statePath string, now time.Time) int {
 	s := pet.Load(statePath)
 	pet.DecayHunger(s, now)
 	form, level := pet.CurrentForm(s)
 
 	rows := pet.Draw(form, pet.StateFor(panelUsage, nil), 0, s.Hunger >= pet.HungerWarn)
-	trail := pet.Lineage(form)
+	trail := lineage(form)
 
 	// How much XP is missing, and what it would turn into.
 	upcomingXP, hasUpcoming := pet.NextThreshold(s.XP)

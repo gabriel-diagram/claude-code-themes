@@ -1,11 +1,13 @@
 // Package statusline renders the three bands and the pet's card.
 //
-//	row 0   band 1 - engine     state label
-//	row 1   band 2 - work       evolution crest
-//	row 2   band 3 - quota      body
-//	row 3                       face
-//	row 4                       body
-//	row 5   speech bubble       feet
+//	row 0   band 1 - engine    state label
+//	row 1   band 2 - work      upper body
+//	row 2   band 3 - quota     face
+//	row 3   band 4 - the pet   legs
+//
+// Four bands against four rows of card. The pet used to be a six-row block
+// pinned to the right of three bands; the design canvas compresses it to three
+// rows and gives it a band of its own, which buys back two rows of terminal.
 package statusline
 
 import (
@@ -20,12 +22,6 @@ import (
 
 // minWidthForPet is where the card stops fitting and the bands take the width.
 const minWidthForPet = 55
-
-// anchor: Claude Code trims leading spaces off each line, so a row whose left
-// half is empty would be "spaces + pet" and the pet would fall to the left
-// margin. Those rows are anchored with a blank braille (U+2800), which paints
-// as nothing but is not a space.
-const anchor = "⠀"
 
 type rateFacts struct {
 	tps   *float64
@@ -122,16 +118,7 @@ func Run(stdin io.Reader, stdout io.Writer) error {
 			assemble(band1, leftWidth),
 			assemble(band2, leftWidth),
 			assemble(band3, leftWidth),
-			"", "", "",
-		}
-		if card.Bubble != "" {
-			// Who is talking is said by the face, not by a quote mark: the
-			// pet's own eye row, and the tail pointing at the text.
-			line := card.Rows[3] + theme.Fg(theme.Tail) + "◗" + theme.Reset + " " +
-				theme.Fg(theme.Text) + card.Bubble + theme.Reset
-			if theme.Width(line) <= leftWidth {
-				left[5] = line
-			}
+			assemble(petBand(card, columns), leftWidth),
 		}
 		fits := true
 		for _, row := range left {
@@ -143,9 +130,6 @@ func Run(stdin io.Reader, stdout io.Writer) error {
 		if fits {
 			laidOut = true
 			for i, row := range left {
-				if strings.TrimSpace(theme.Strip(row)) == "" {
-					row = anchor
-				}
 				lines = append(lines, theme.PadRight(row, leftWidth)+
 					strings.Repeat(" ", cardGap)+card.Rows[i])
 			}
@@ -156,6 +140,9 @@ func Run(stdin io.Reader, stdout io.Writer) error {
 			assemble(band1, width),
 			assemble(band2, width),
 			assemble(band3, width),
+		}
+		if haveCard {
+			lines = append(lines, assemble(petBand(card, columns), width))
 		}
 	}
 

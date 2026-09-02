@@ -117,6 +117,31 @@ func itoa(n int) string {
 	return digits
 }
 
+func TestTheFooterIsFourBandsPlusTheRule(t *testing.T) {
+	// The canvas: four bands on the left, four rows of card on the right. Two
+	// rows less than the six the pet used to take.
+	lines := render(t, payload, 140)
+	if len(lines) != 5 { // the rule on top plus the four bands
+		t.Fatalf("footer is %d lines, want 5", len(lines))
+	}
+	last := theme.Strip(lines[len(lines)-1])
+	if !strings.Contains(last, "nivel ") {
+		t.Errorf("band 4 does not carry the level: %q", last)
+	}
+}
+
+func TestBandFourCollapsesToTheTradeWhenNarrow(t *testing.T) {
+	// "con menos de 100 columnas se cae sola y solo queda el oficio"
+	lines := render(t, payload, 90)
+	last := theme.Strip(lines[len(lines)-1])
+	if strings.Contains(last, "nivel ") {
+		t.Errorf("band 4 kept the level below 100 columns: %q", last)
+	}
+	if strings.TrimSpace(last) == "" {
+		t.Error("band 4 vanished entirely")
+	}
+}
+
 func TestNoRenderedLineIsWiderThanTheTerminal(t *testing.T) {
 	for _, columns := range []int{200, 140, 120, 100, 80, 70, 60, 55, 50, 40, 30, 20} {
 		for _, line := range render(t, payload, columns) {
@@ -141,7 +166,7 @@ func TestAHostilePayloadStillPrintsItsRows(t *testing.T) {
 	}
 	for i, doc := range hostile {
 		lines := render(t, doc, 140)
-		if len(lines) < 3 {
+		if len(lines) < 4 {
 			t.Errorf("payload %d produced %d lines", i, len(lines))
 		}
 	}

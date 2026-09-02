@@ -89,7 +89,7 @@ otro).
 | commit hecho | **+12** | −3 | — |
 | `/compact` | **+8** | −3 | — |
 | tarea del plan cerrada | **+6** | −1 | — |
-| `/feed` | **+3** | −2 | 4 al día |
+| `/feed` | **+3** | −2 | uno cada 4 h |
 | contexto al 100% | **−15** | — | — |
 
 El **hambre** sube +1 por hora sin comer, hasta 10. A partir de 7 los ojos se
@@ -185,7 +185,7 @@ bajo** casi siempre, y ninguna se inventa un hecho que no haya ocurrido.
 
 ```bash
 pet                    # el panel: nivel, evolución, xp, hambre, racha y la comida de hoy
-pet feed               # +3 xp, hambre −2, máximo 4 al día
+pet feed               # +3 xp, hambre −2, uno cada cuatro horas
 pet cuenta <c> [n]     # suma a un contador de comportamiento
 pet record <c> <v>     # guarda el máximo de un contador
 ```

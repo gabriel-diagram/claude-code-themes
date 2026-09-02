@@ -62,6 +62,85 @@ func flat(lower string) string {
 	return string(out)
 }
 
+// Compact rows for the statusline. The design canvas calls this 9b and says it
+// is the one applied: five rows in the panels, three in the statusline, where
+// two rows of terminal are worth more than a crest.
+//
+// The crest goes (forms are told apart by the Upper row, which already varies)
+// and the feet move into the lower contour:
+//
+//	 ▗▟███▙▖      row 1 = Upper
+//	▐█ > < █▌     row 2 = Face
+//	 ▘▝▜█▛▝▘      row 3 = legs + a three-cell body + legs
+//
+// The canvas fixes the four states of that third row, and they are the
+// acceptance test: walk ` ▘▝▜█▛▝▘ ` <-> ` ▝▘▜█▛▘▝ `, sunk ` ▖▗▜█▛▗▖ `, k.o.
+// ` ▄▄▀▀▀▄▄ `.
+const CompactRows = 3
+
+// corners are the glyphs that cap a lower contour; they are dropped before the
+// body is squeezed to three cells.
+const corners = "▝▘▗▖"
+
+// squeeze reduces a lower contour to the three cells the compact row has room
+// for: the two shoulders and one cell of body.
+func squeeze(lower string) string {
+	body := []rune(strings.TrimSpace(lower))
+	for len(body) > 0 && strings.ContainsRune(corners, body[0]) {
+		body = body[1:]
+	}
+	for len(body) > 0 && strings.ContainsRune(corners, body[len(body)-1]) {
+		body = body[:len(body)-1]
+	}
+	switch len(body) {
+	case 0:
+		return "   "
+	case 1:
+		return string([]rune{body[0], body[0], body[0]})
+	case 2:
+		return string([]rune{body[0], body[0], body[1]})
+	}
+	return string([]rune{body[0], body[len(body)/2], body[len(body)-1]})
+}
+
+// DrawCompact returns the three coloured rows the statusline uses.
+func DrawCompact(form string, v Vital, step int, dimEyes bool) [3]string {
+	sprite, ok := Sprites[form]
+	if !ok {
+		sprite = Sprites[Root]
+	}
+
+	ko := v.Label == "k.o."
+	upper := sprite.Upper
+	if !v.HeadUp {
+		upper = slump(upper)
+	}
+
+	legs, body := "▘▝", squeeze(sprite.Lower)
+	switch {
+	case ko:
+		legs, body = "▄▄", "▀▀▀"
+	case !v.Walks:
+		legs = mapRow(legs, stillMap)
+	case walkAlways() || step%12 < 4:
+		if step%2 != 0 {
+			legs = mapRow(legs, stepMap)
+		}
+	default:
+		legs = mapRow(legs, stillMap)
+	}
+	mirror := []rune(legs)
+	row3 := " " + legs + body + string([]rune{mirror[1], mirror[0]}) + " "
+
+	bodyCol := theme.Fg(v.Colour)
+	darkCol := theme.Fg(v.DarkEye)
+	return [3]string{
+		bodyCol + upper + theme.Reset,
+		faceRow(sprite, v, step, dimEyes),
+		darkCol + row3 + theme.Reset,
+	}
+}
+
 // Draw returns the five coloured rows, SpriteWidth visible columns each.
 // step advances on every refresh; the walk cycle and the blink come out of it.
 func Draw(form string, v Vital, step int, dimEyes bool) [5]string {
@@ -70,14 +149,7 @@ func Draw(form string, v Vital, step int, dimEyes bool) [5]string {
 		sprite = Sprites[Root]
 	}
 
-	eyes := sprite.OwnEyes
-	if !v.Intact() {
-		eyes = v.Eyes
-	}
 	walks := v.Walks
-	if walks && step%7 == 3 { // blink, one frame in seven
-		eyes = [2]rune{'_', '_'}
-	}
 	if walks && !walkAlways() {
 		walks = step%12 < 4
 	}
@@ -109,30 +181,6 @@ func Draw(form string, v Vital, step int, dimEyes bool) [5]string {
 
 	bodyCol := theme.Fg(v.Colour)
 	darkCol := theme.Fg(v.DarkEye)
-	// Hungry eyes go out: same glyph, sunken colour.
-	eyeCol := theme.Fg(v.PaleEye)
-	if dimEyes {
-		eyeCol = theme.Fg(v.DarkEye)
-	}
-
-	face := []rune(sprite.Face)
-	var row3 strings.Builder
-	row3.WriteString(bodyCol)
-	for i, r := range face {
-		switch i {
-		case sprite.EyeCols[0]:
-			row3.WriteString(eyeCol)
-			row3.WriteRune(eyes[0])
-			row3.WriteString(bodyCol)
-		case sprite.EyeCols[1]:
-			row3.WriteString(eyeCol)
-			row3.WriteRune(eyes[1])
-			row3.WriteString(bodyCol)
-		default:
-			row3.WriteRune(r)
-		}
-	}
-	row3.WriteString(theme.Reset)
 
 	first := bodyCol
 	if ko {
@@ -141,8 +189,54 @@ func Draw(form string, v Vital, step int, dimEyes bool) [5]string {
 	return [5]string{
 		first + row1 + theme.Reset,
 		bodyCol + row2 + theme.Reset,
-		row3.String(),
+		faceRow(sprite, v, step, dimEyes),
 		bodyCol + row4 + theme.Reset,
 		darkCol + row5 + theme.Reset,
 	}
+}
+
+// eyesFor picks the pair of glyphs for a frame. The evolution keeps its own
+// while it is intact; from "easy" downwards the state takes over, which is what
+// lets you read the tiredness at a glance without reading the label. One frame
+// in seven it blinks, but only while it is still walking.
+func eyesFor(sprite Sprite, v Vital, step int) [2]rune {
+	eyes := sprite.OwnEyes
+	if !v.Intact() {
+		eyes = v.Eyes
+	}
+	if v.Walks && step%7 == 3 {
+		eyes = [2]rune{'_', '_'}
+	}
+	return eyes
+}
+
+// faceRow paints the face with its eyes in place. Shared by both renderers:
+// the face is the one row the compact form keeps whole.
+func faceRow(sprite Sprite, v Vital, step int, dimEyes bool) string {
+	eyes := eyesFor(sprite, v, step)
+	bodyCol := theme.Fg(v.Colour)
+	// Hungry eyes go out: same glyph, sunken colour.
+	eyeCol := theme.Fg(v.PaleEye)
+	if dimEyes {
+		eyeCol = theme.Fg(v.DarkEye)
+	}
+
+	var row strings.Builder
+	row.WriteString(bodyCol)
+	for i, r := range []rune(sprite.Face) {
+		switch i {
+		case sprite.EyeCols[0]:
+			row.WriteString(eyeCol)
+			row.WriteRune(eyes[0])
+			row.WriteString(bodyCol)
+		case sprite.EyeCols[1]:
+			row.WriteString(eyeCol)
+			row.WriteRune(eyes[1])
+			row.WriteString(bodyCol)
+		default:
+			row.WriteRune(r)
+		}
+	}
+	row.WriteString(theme.Reset)
+	return row.String()
 }

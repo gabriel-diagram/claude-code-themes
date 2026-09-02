@@ -1,0 +1,169 @@
+package pet
+
+import (
+	"fmt"
+	"math/rand"
+	"time"
+)
+
+// What the pet says, from the design canvas "Tema Terminal Claude CLI",
+// artboard 08 - lo que dice. The phrases are Spanish on purpose: they are the
+// pet's voice, not its API, and half of them are jokes that do not survive a
+// translation ("el bug no era el código, era el jueves").
+//
+// Three rules, all from the canvas:
+//
+//   - Primero el evento, luego la forma. The four shared lines belong to
+//     specific events and everyone says them; a form's own repertoire is its
+//     voice for a good meal. A form with no repertoire of its own - the three
+//     temperaments, the fourteen marks, the two secrets - only ever says the
+//     shared ones.
+//   - Sin repetir. The last SaidMemory phrases live in pet.json and do not come
+//     back until the repertoire is exhausted.
+//   - Silencio por defecto. At most one line every SpeechCooldown, and without
+//     an event it says nothing: the statusline is not a chat.
+
+// SaidMemory is how many phrases back the pet remembers not to repeat.
+const SaidMemory = 3
+
+// SpeechCooldown is the floor between two lines.
+const SpeechCooldown = 5 * time.Minute
+
+// Event is what opens the pet's mouth.
+type Event string
+
+// The five things worth saying something about.
+const (
+	EventNothing  Event = ""
+	EventBigMeal  Event = "big_meal"
+	EventHungry   Event = "hungry"
+	EventLevelUp  Event = "level_up"
+	EventStreak   Event = "streak"
+	EventCtxBlown Event = "ctx_blown"
+)
+
+// Repertoire is what each form says after a good meal. Forms absent from this
+// table fall back to the shared lines.
+var Repertoire = map[string][]string{
+	"spark": {
+		"acabo de nacer y ya tienes 40 tests rojos",
+		"no sé hacer nada todavía, pero mira qué mono",
+		"me han dicho que aquí se come compactando",
+	},
+	"refactor": {
+		"he borrado 40 líneas y nadie las va a echar de menos",
+		"eso estaba escrito tres veces. ahora una.",
+		"si vuelves a duplicar ese bloque me como el linter",
+	},
+	"tidy": {
+		"38% de contexto. respiro por la nariz.",
+		"te he ordenado los imports. no hace falta que digas nada.",
+		"hay polvo en ese fichero desde 2023",
+	},
+	"bughunter": {
+		"el bug no era el código, era el jueves",
+		"reproducido. ahora ya es personal.",
+		"14 tests verdes. uno iba de suerte.",
+	},
+	"architect": {
+		"antes de tocar nada, un plano",
+		"esto tiene tres capas y dos son la misma",
+		"te he escrito un doc. lo leerás en marzo.",
+	},
+	"sprinter": {
+		"hecho. ¿tenías otra?",
+		"11 minutos, y la mitad los gastaste leyendo",
+		"no he leído el fichero entero. tampoco hacía falta.",
+	},
+	"marathon": {
+		"cuatro horas. yo sigo, de ti no estoy seguro.",
+		"esto ya no es una sesión, es un piso compartido",
+		"he perdido la cuenta de los commits. tú también.",
+	},
+	"feral": {
+		"99% de contexto. me gusta vivir así.",
+		"permisos en bypass. qué puede salir mal.",
+		"he tocado prod. tranquilo. era el seed.",
+	},
+}
+
+// Shared lines. They do not depend on the form, and they carry the number the
+// event is about.
+func shared(e Event, level, streak, hunger int) string {
+	switch e {
+	case EventHungry:
+		return "tengo hambre. un /compact y nos entendemos."
+	case EventLevelUp:
+		return fmt.Sprintf("nivel %d. ya soy alguien.", level)
+	case EventStreak:
+		return fmt.Sprintf("%s de racha. mañana no me falles.", days(streak))
+	case EventCtxBlown:
+		return "100% de contexto. avisé. no pasa nada."
+	}
+	return ""
+}
+
+// days spells small numbers, because "cinco días de racha" reads better than
+// "5 días de racha" and the canvas writes it out.
+func days(n int) string {
+	names := []string{"cero días", "un día", "dos días", "tres días", "cuatro días",
+		"cinco días", "seis días", "siete días"}
+	if n >= 0 && n < len(names) {
+		return names[n]
+	}
+	return fmt.Sprintf("%d días", n)
+}
+
+// Speak picks a line, or returns "" for silence. It records what was said, so
+// the caller must save the state when it gets a non-empty answer.
+//
+// `now` and `pick` are parameters so the whole thing is testable without a
+// clock or a seed.
+func Speak(s *State, e Event, form string, now time.Time, pick func(int) int) string {
+	if e == EventNothing {
+		return "" // sin evento no habla
+	}
+	if s.SaidAt != 0 && now.Sub(time.Unix(s.SaidAt, 0)) < SpeechCooldown {
+		return "" // silencio por defecto
+	}
+
+	var options []string
+	if e == EventBigMeal {
+		options = Repertoire[form]
+	} else if line := shared(e, LevelFor(s.XP), s.Streak, s.Hunger); line != "" {
+		options = []string{line}
+	}
+	if len(options) == 0 {
+		return ""
+	}
+
+	fresh := make([]string, 0, len(options))
+	for _, line := range options {
+		if !s.saidRecently(line) {
+			fresh = append(fresh, line)
+		}
+	}
+	if len(fresh) == 0 {
+		fresh = options // repertorio agotado: vuelve a empezar
+	}
+	if pick == nil {
+		pick = rand.Intn
+	}
+	line := fresh[pick(len(fresh))]
+
+	s.Said = append(s.Said, line)
+	if len(s.Said) > SaidMemory {
+		s.Said = s.Said[len(s.Said)-SaidMemory:]
+	}
+	s.SaidAt = now.Unix()
+	return line
+}
+
+func (s *State) saidRecently(line string) bool {
+	for _, said := range s.Said {
+		if said == line {
+			return true
+		}
+	}
+	return false
+}

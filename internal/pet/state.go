@@ -64,7 +64,7 @@ type State struct {
 	BestStreak int               `json:"best_streak"`
 	LevelSeen  int               `json:"level_seen"`
 	HungerPeak int               `json:"hunger_peak"`
-	FedToday   int               `json:"fed_today"`
+	FedAt      int64             `json:"fed_at"`
 	LastDay    string            `json:"last_day"`
 	RepoDay    string            `json:"repo_day"`
 	LogDay     string            `json:"log_day"`
@@ -72,11 +72,17 @@ type State struct {
 	Counters   map[string]int    `json:"counters"`
 	Log        []LogEntry        `json:"log"`
 	DayMarks   map[string]string `json:"day_marks"`
+
+	// What the pet has said lately, so it does not repeat itself, and when.
+	// See speech.go.
+	Said   []string `json:"said"`
+	SaidAt int64    `json:"said_at"`
 }
 
 // New is a newborn pet.
 func New() *State {
-	return &State{Counters: map[string]int{}, Log: []LogEntry{}, DayMarks: map[string]string{}}
+	return &State{Counters: map[string]int{}, Log: []LogEntry{},
+		DayMarks: map[string]string{}, Said: []string{}}
 }
 
 // --- v1 (Spanish) -> v2 (English). Read once, written back translated. ------
@@ -180,7 +186,10 @@ func Load(path string) *State {
 	s.BestStreak = asInt(flat["best_streak"])
 	s.LevelSeen = asInt(flat["level_seen"])
 	s.HungerPeak = asInt(flat["hunger_peak"])
-	s.FedToday = asInt(flat["fed_today"])
+	// fed_today (a daily counter) is gone: /feed is a cooldown now, and an old
+	// key just falls through here unread.
+	s.FedAt = int64(asInt(flat["fed_at"]))
+	s.SaidAt = int64(asInt(flat["said_at"]))
 	s.LastDay = asString(flat["last_day"])
 	s.RepoDay = asString(flat["repo_day"])
 	s.LogDay = asString(flat["log_day"])
@@ -211,6 +220,17 @@ func Load(path string) *State {
 			if day, ok := v.(string); ok {
 				s.DayMarks[k] = day
 			}
+		}
+	}
+
+	if said, ok := flat["said"].([]any); ok {
+		for _, item := range said {
+			if line, ok := item.(string); ok {
+				s.Said = append(s.Said, line)
+			}
+		}
+		if len(s.Said) > SaidMemory {
+			s.Said = s.Said[len(s.Said)-SaidMemory:]
 		}
 	}
 
@@ -252,6 +272,9 @@ func Save(s *State, path string) bool {
 	}
 	if s.DayMarks == nil {
 		s.DayMarks = map[string]string{}
+	}
+	if s.Said == nil {
+		s.Said = []string{}
 	}
 	dir := filepath.Dir(path)
 	if os.MkdirAll(dir, 0o755) != nil {

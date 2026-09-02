@@ -1,7 +1,6 @@
 package statusline
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/gabriel-diagram/claude-code-themes/internal/pet"
@@ -18,11 +17,19 @@ import (
 // can see, because hooks receive neither the context usage nor the permission
 // mode.
 
-// Card is what the right-hand column renders to.
+// Card is the right-hand column plus everything band 4 needs. Four rows on the
+// right - the state label and the three of the compact sprite - against the
+// four bands on the left.
 type Card struct {
-	Rows   [6]string
+	Rows   [4]string
 	Bubble string
 	Facts  *session.Facts
+
+	Form   string
+	Level  int
+	XP     int
+	NextXP int
+	Vital  pet.Vital
 }
 
 // book applies the side effects on pet.json. A failure here must never take the
@@ -49,31 +56,25 @@ func book(p *Payload, previousLabel, label string, newTurn bool, statePath strin
 	}
 }
 
-// bubble is what the pet says. It only speaks when it has something to say.
-func bubble(p *Payload, s *pet.State, level int, form string, label string,
-	levelledUp bool, statePath string) string {
-	if levelledUp {
-		fresh := pet.Load(statePath)
-		fresh.LevelSeen = level
-		pet.Save(fresh, statePath)
-		return fmt.Sprintf("level %d. %s", level, form)
+// eventFor is the "primero el evento" half of the canvas's rule: what, if
+// anything, is worth opening the pet's mouth about, in the order it matters.
+func eventFor(s *pet.State, label string, levelledUp, bigMeal bool) pet.Event {
+	switch {
+	case levelledUp:
+		return pet.EventLevelUp
+	case label == "k.o.":
+		return pet.EventCtxBlown
+	case s.Hunger >= pet.HungerWarn:
+		return pet.EventHungry
+	case bigMeal:
+		return pet.EventBigMeal
+	case s.Streak >= 3:
+		return pet.EventStreak
 	}
-	if s.Hunger >= pet.HungerWarn {
-		return fmt.Sprintf("%dh without food. /feed", s.Hunger)
-	}
-	if label == "k.o." {
-		return "context at 100%. i did warn you. it's fine."
-	}
-	if label == "tired" && p.Duration != nil && *p.Duration > 4*3600*1000 {
-		return "4h in. i'd be sluggish too"
-	}
-	if s.Streak >= 3 {
-		return fmt.Sprintf("%d-day streak. don't break it today", s.Streak)
-	}
-	return ""
+	return pet.EventNothing
 }
 
-// RenderCard builds the six-row column and whatever the pet has to say.
+// RenderCard builds the right-hand column and whatever the pet has to say.
 func RenderCard(p *Payload, facts session.Facts, rate rateFacts, newTurn, bubbleAllowed bool,
 	statePath string, now time.Time) Card {
 	usage := pet.WeightedUsage(p.ContextPc, p.FiveHour, p.SevenDay)
@@ -87,7 +88,7 @@ func RenderCard(p *Payload, facts session.Facts, rate rateFacts, newTurn, bubble
 	// pet.json itself.
 	levelledUp := level > s.LevelSeen
 
-	rows := pet.Draw(form, vital, int(now.Unix()), s.Hunger >= pet.HungerWarn)
+	rows := pet.DrawCompact(form, vital, int(now.Unix()), s.Hunger >= pet.HungerWarn)
 
 	previousLabel := facts.Label
 	// Crossing a threshold makes the label bold for one refresh.
@@ -139,8 +140,31 @@ func RenderCard(p *Payload, facts session.Facts, rate rateFacts, newTurn, bubble
 	out.Rows[0] = theme.Centre(head, painted, cardWidth)
 	copy(out.Rows[1:], rows[:])
 
+	out.Form, out.Level, out.XP, out.Vital = form, level, s.XP, vital
+	if next, ok := pet.NextThreshold(s.XP); ok {
+		out.NextXP = next
+	}
+
 	if bubbleAllowed {
-		out.Bubble = bubble(p, s, level, form, label, levelledUp, statePath)
+		// A big meal is one the hook just fed it; the statusline sees it as a
+		// log entry younger than a refresh or two.
+		bigMeal := false
+		if n := len(s.Log); n > 0 {
+			last := s.Log[n-1]
+			bigMeal = pet.BigMeal(last.Event) && now.Unix()-last.At < 10
+		}
+		event := eventFor(s, label, levelledUp, bigMeal)
+		if line := pet.Speak(s, event, form, now, nil); line != "" {
+			out.Bubble = line
+			// Speak records what it said, so the state has to go back to disk.
+			// The level it announced goes with it.
+			fresh := pet.Load(statePath)
+			fresh.Said, fresh.SaidAt = s.Said, s.SaidAt
+			if levelledUp {
+				fresh.LevelSeen = level
+			}
+			pet.Save(fresh, statePath)
+		}
 	}
 	return out
 }
