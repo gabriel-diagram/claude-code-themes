@@ -207,9 +207,10 @@ func TestContextLabelAndDuration(t *testing.T) {
 }
 
 func TestTheStateIsSaidOnceNotTwice(t *testing.T) {
-	// The canvas draws it on the card AND in band 4, but on a real terminal
-	// the same word lands on the same footer twice and reads as a bug. The
-	// card's copy is the one that stays.
+	// The canvas draws it on the card AND in band 4, but on a real terminal the
+	// same word lands on the same footer twice and reads as a bug. Band 4 is
+	// the copy that stays: the card's top row went back to the creature's
+	// crest, which is what the atlas says names the form.
 	lines := render(t, payload, 140)
 	footer := theme.Strip(strings.Join(lines, "\n"))
 
@@ -227,22 +228,30 @@ func TestTheStateIsSaidOnceNotTwice(t *testing.T) {
 		t.Errorf("%q appears %d times on one footer, want once:\n%s", said, n, footer)
 	}
 
-	// And it is the card that carries it, not the band.
+	// And it is the band that carries it, not the card - the card's four rows
+	// are all sprite now.
 	last := theme.Strip(lines[len(lines)-1])
 	row := []rune(last)
 	band := strings.TrimSpace(string(row[:len(row)-cardWidth-cardGap]))
-	if strings.Contains(band, said) {
-		t.Errorf("band 4 kept a copy of the state: %q", band)
+	if !strings.Contains(band, said) {
+		t.Errorf("band 4 lost the state: %q", band)
+	}
+	for _, line := range lines {
+		r := []rune(theme.Strip(line))
+		card := string(r[len(r)-cardWidth:])
+		if strings.Contains(card, said) {
+			t.Errorf("the card kept a copy of the state: %q", card)
+		}
 	}
 }
 
 func TestAtTheTopTheBandIsTradeAndLevel(t *testing.T) {
-	// The mark is worn, so there is no bar left to draw. The band is short by
-	// design here - the state that used to pad it lives on the card now.
+	// The mark is worn, so there is no bar left to draw - but the state is in
+	// this band now, so it is not as bare as it was.
 	band := petBand(Card{
 		Form:  "exterminador",
 		Level: 5,
-		Vital: pet.StateFor(20, nil),
+		Vital: pet.StateFor(20),
 	}, 140)
 	line := theme.Strip(assemble(band, 140))
 	for _, want := range []string{"exterminador", "nivel 5"} {
@@ -252,22 +261,45 @@ func TestAtTheTopTheBandIsTradeAndLevel(t *testing.T) {
 	}
 }
 
-func TestBandFourSwapsTheBarForTheHabitAtTheTop(t *testing.T) {
+// Band 4 names the mark being filled and draws NO bar for it. The bar used to
+// be there - twelve cells, XP in green and the habit in amber - and it came out
+// by request: band 1 already carries one, and a second beside the state read as
+// the same measurement twice.
+func TestBandFourNamesTheMarkWithoutDrawingABar(t *testing.T) {
 	band := petBand(Card{
 		Form:  "bughunter",
 		Level: 5,
 		Done:  12,
 		Span:  15,
 		Mark:  "exterminador",
-		Vital: pet.StateFor(20, nil),
+		Vital: pet.StateFor(20),
 	}, 140)
 	line := theme.Strip(assemble(band, 140))
 	if !strings.Contains(line, "exterminador") {
-		t.Errorf("the habit bar does not name the mark it opens: %q", line)
+		t.Errorf("band 4 does not name the mark it is filling: %q", line)
 	}
-	// 12/15 of twelve cells is ten full, two empty.
-	if !strings.Contains(line, strings.Repeat("█", 10)+strings.Repeat("░", 2)) {
-		t.Errorf("the habit bar is not at 12/15: %q", line)
+	if strings.ContainsAny(line, "█░") {
+		t.Errorf("band 4 still draws a bar: %q", line)
+	}
+}
+
+// And with XP still opening a level there is no mark to name, so nothing is
+// added at all - no bar, no stray word.
+func TestBandFourDrawsNothingWhileTheProgressIsXP(t *testing.T) {
+	band := petBand(Card{
+		Form:  "bughunter",
+		Level: 4,
+		Done:  433,
+		Span:  500,
+		State: "fresca ✦",
+		Vital: pet.StateFor(20),
+	}, 140)
+	line := theme.Strip(assemble(band, 140))
+	if strings.ContainsAny(line, "█░") {
+		t.Errorf("the XP bar came back to band 4: %q", line)
+	}
+	if strings.TrimSpace(line) != "bughunter nivel 4 │ fresca ✦" {
+		t.Errorf("band 4 is %q, want the trade, the level and the state and nothing else", line)
 	}
 }
 
@@ -276,7 +308,7 @@ func TestBandFourStillCollapsesToTheTradeWhenNarrow(t *testing.T) {
 	band := petBand(Card{
 		Form:  "bughunter",
 		Level: 5,
-		Vital: pet.StateFor(20, nil),
+		Vital: pet.StateFor(20),
 	}, 90)
 	line := theme.Strip(assemble(band, 90))
 	if strings.TrimSpace(line) != "bughunter" {
@@ -292,11 +324,19 @@ func TestTheBypassMarkIsMeasuredAndNotAssumed(t *testing.T) {
 	if theme.Width(BypassMark) != 2 {
 		t.Errorf("the mark measures %d, want 2", theme.Width(BypassMark))
 	}
+	// The invariant that actually matters: band 1 never claims fewer columns
+	// than it draws, mark and all.
+	for _, width := range []int{40, 60, 80, 140} {
+		band := assemble(engine(&Payload{Model: "Opus 5", Permissions: "bypass"}, nil, nil), width)
+		if got := theme.Width(band); got > width {
+			t.Errorf("at %d columns the band came out %d wide", width, got)
+		}
+	}
 }
 
 func TestTheBypassBadgeDoesNotSpellTheWord(t *testing.T) {
 	// The CLI already writes "bypass permissions on" under the prompt box.
-	band := assemble(engine(&Payload{Model: "Opus 5", Permissions: "bypass"}, nil), 140)
+	band := assemble(engine(&Payload{Model: "Opus 5", Permissions: "bypass"}, nil, nil), 140)
 	line := theme.Strip(band)
 	if strings.Contains(line, "bypass") {
 		t.Errorf("band 1 still spells it out: %q", line)
@@ -309,9 +349,125 @@ func TestTheBypassBadgeDoesNotSpellTheWord(t *testing.T) {
 func TestTheOtherModesKeepTheirName(t *testing.T) {
 	for _, mode := range []string{"plan", "auto-edit"} {
 		line := theme.Strip(assemble(
-			engine(&Payload{Model: "Opus 5", Permissions: mode}, nil), 140))
+			engine(&Payload{Model: "Opus 5", Permissions: mode}, nil, nil), 140))
 		if !strings.Contains(line, mode) {
 			t.Errorf("%q lost its name: %q", mode, line)
 		}
+	}
+}
+
+// Band 3: the folder and the output style. Both follow the same rule - nothing
+// shows unless it says something - which is the whole reason the band had room.
+
+func TestTheDefaultStyleIsNotAName(t *testing.T) {
+	// "default" is what the CLI sends when nothing is set. Painting it spends
+	// columns to say that nothing is set.
+	if got := outputStyle("default"); got != "" {
+		t.Errorf("the default survived as %q", got)
+	}
+	for _, name := range []string{"Criterio", "Explanatory", "Learning"} {
+		if got := outputStyle(name); got != name {
+			t.Errorf("outputStyle(%q) = %q", name, got)
+		}
+	}
+}
+
+func TestBandThreeCarriesTheStyle(t *testing.T) {
+	line := theme.Strip(assemble(
+		quota(&Payload{Dirname: "themes", Label: "themes", Style: "Criterio"}), 80))
+	if !strings.Contains(line, "criterio") {
+		t.Errorf("the style is missing from band 3: %q", line)
+	}
+	// At the root the folder still says nothing band 2 has not.
+	if strings.Contains(line, "themes") {
+		t.Errorf("the folder came back at the root: %q", line)
+	}
+}
+
+func TestBandThreeIsStillEmptyWithNothingToSay(t *testing.T) {
+	// The root of a repo with no style set, which is most sessions.
+	if line := assemble(quota(&Payload{Dirname: "themes", Label: "themes"}), 80); line != "" {
+		t.Errorf("band 3 drew %q with nothing to draw", line)
+	}
+}
+
+func TestBandThreeReadsWhereThenWho(t *testing.T) {
+	line := theme.Strip(assemble(
+		quota(&Payload{Dirname: "internal", Label: "themes", Style: "Criterio"}), 80))
+	where, who := strings.Index(line, "internal"), strings.Index(line, "criterio")
+	if where < 0 || who < 0 {
+		t.Fatalf("band 3 lost an element: %q", line)
+	}
+	if where > who {
+		t.Errorf("the style came before the folder: %q", line)
+	}
+}
+
+func TestTheStyleGoesBeforeTheFolderWhenNarrow(t *testing.T) {
+	// The band was the folder's before it was the style's.
+	line := theme.Strip(assemble(
+		quota(&Payload{Dirname: "internal", Label: "themes", Style: "Criterio"}), 10))
+	if strings.Contains(line, "criterio") {
+		t.Errorf("the style survived the squeeze: %q", line)
+	}
+	if !strings.Contains(line, "internal") {
+		t.Errorf("the folder was dropped instead: %q", line)
+	}
+}
+
+func TestTheStyleIsPaintedAsASetting(t *testing.T) {
+	// Two bare names side by side are told apart by colour alone, so the folder
+	// has to stay grey and the style has to wear Mode, the same purple as
+	// `xhigh` and `plan`.
+	band := assemble(quota(&Payload{Dirname: "internal", Label: "themes", Style: "Criterio"}), 80)
+	if !strings.Contains(band, theme.Fg(theme.Mode)+"criterio") {
+		t.Errorf("the style is not painted as a CLI setting: %q", band)
+	}
+	if !strings.Contains(band, theme.Fg(theme.Dir)+"internal") {
+		t.Errorf("the folder lost its grey: %q", band)
+	}
+}
+
+func TestTheStyleComesOffThePayload(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want string
+	}{
+		{`{"output_style":{"name":"Criterio"}}`, "Criterio"},
+		{`{"output_style":{"name":"default"}}`, ""},
+		{`{}`, ""},
+		{`{"output_style":{}}`, ""},
+		{`{"output_style":"Criterio"}`, ""},
+	} {
+		var doc map[string]any
+		if err := json.Unmarshal([]byte(tc.raw), &doc); err != nil {
+			t.Fatalf("%s: %v", tc.raw, err)
+		}
+		if got := Parse(doc).Style; got != tc.want {
+			t.Errorf("%s gave style %q, want %q", tc.raw, got, tc.want)
+		}
+	}
+}
+
+func TestTheStyleSpeaksInTheFootersVoice(t *testing.T) {
+	// The seat is a CLI setting's seat, and every other name in it - `xhigh`,
+	// `plan`, the pet's own words - arrives lowercase. The two built-in styles
+	// ship capitalised and cannot be renamed, so the band does it.
+	for _, name := range []string{"Criterio", "Explanatory", "Learning"} {
+		line := theme.Strip(assemble(quota(&Payload{Style: name}), 80))
+		if line != strings.ToLower(name) {
+			t.Errorf("%q was painted as %q", name, line)
+		}
+	}
+	// The folder keeps its case: it has to match what `ls` says.
+	line := theme.Strip(assemble(quota(&Payload{Dirname: "Internal", Label: "themes"}), 80))
+	if !strings.Contains(line, "Internal") {
+		t.Errorf("the folder was lowercased too: %q", line)
+	}
+	// And Payload keeps the real name; only the band shrinks it.
+	if got := Parse(map[string]any{
+		"output_style": map[string]any{"name": "Criterio"},
+	}).Style; got != "Criterio" {
+		t.Errorf("Parse lowercased the name: %q", got)
 	}
 }

@@ -114,8 +114,11 @@ func days(n int) string {
 	return fmt.Sprintf("%d días", n)
 }
 
-// Speak picks a line, or returns "" for silence. It records what was said, so
-// the caller must save the state when it gets a non-empty answer.
+// Speak picks a line, or returns "" for silence. It does NOT record anything:
+// the line still has to survive the band's layout, and a bubble dropped for
+// width used to burn the five-minute cooldown and mark the phrase as said
+// anyway - the pet talking into the void and then holding its tongue for a
+// line nobody read. Whoever puts it on screen calls Remember.
 //
 // `now` and `pick` are parameters so the whole thing is testable without a
 // clock or a seed.
@@ -165,14 +168,20 @@ func Speak(s *State, e Event, form string, now time.Time, pick func(int) int) st
 	if pick == nil {
 		pick = rand.Intn
 	}
-	line := fresh[pick(len(fresh))]
+	return fresh[pick(len(fresh))]
+}
 
+// Remember books a line as said and starts the cooldown. Called only once the
+// line has actually reached the screen.
+func Remember(s *State, line string, now time.Time) {
+	if line == "" {
+		return
+	}
 	s.Said = append(s.Said, line)
 	if len(s.Said) > SaidMemory {
 		s.Said = s.Said[len(s.Said)-SaidMemory:]
 	}
 	s.SaidAt = now.Unix()
-	return line
 }
 
 func (s *State) saidRecently(line string) bool {

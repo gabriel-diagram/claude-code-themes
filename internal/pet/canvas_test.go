@@ -13,7 +13,7 @@ import (
 // with the claude_design MCP and point CANVAS at it:
 //
 //	DesignSync method=get_file projectId=4639e060-9aec-4ae3-855a-f8530ae9ab34 \
-//	           path="Tema Terminal Claude CLI.dc.html"
+//	           path="Formas y Estados.dc.html"
 //	CANVAS=/path/to/lienzo.html go test ./internal/pet/ -run Canvas
 //
 // Without it the test skips, so a normal `go test ./...` is unaffected.
@@ -51,8 +51,8 @@ func TestSpritesMatchTheCanvasRowByRow(t *testing.T) {
 	// la cara del codigo va SIN ojos; el lienzo la dibuja con los suyos
 	face := func(s Sprite) string {
 		r := []rune(s.Face)
-		r[s.EyeCols[0]] = s.OwnEyes[0]
-		r[s.EyeCols[1]] = s.OwnEyes[1]
+		r[s.EyeCols[0]] = '>'
+		r[s.EyeCols[1]] = '<'
 		return strings.TrimRight(string(r), " ")
 	}
 

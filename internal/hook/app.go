@@ -34,10 +34,17 @@ var editTools = map[string]bool{
 // planMinTasks is what counts as a plan for the oracle.
 const planMinTasks = 3
 
-// ImpulsivePeak is the context peak a session has to reach to count as having
-// been run at the limit. It sits above "cansada" and below "ahogada": high
-// enough that it was not a comfortable session, short of the crash.
-const ImpulsivePeak = 85
+// ImpulsivePeak and FeralPeak are the two context peaks the ember branch is
+// paid from. The first sits above "cansada" and below "ahogada": high enough
+// that it was not a comfortable session, short of the crash. The second is the
+// same gesture one notch harder, and it is what picks `feral` over its two
+// siblings at level 3.
+//
+// Both are PEAKS, not crashes, and that is the whole point. See CloseSession.
+const (
+	ImpulsivePeak = 85
+	FeralPeak     = 95
+)
 
 // hookState is the per-session scratch this package owns.
 type hookState struct {
@@ -345,10 +352,13 @@ func CloseSession(factsPath, statePath string, now time.Time) {
 	}
 
 	s := pet.Load(statePath)
-	if facts.Peak < 40 {
+	// These three are named for the context and mean it, so they read the
+	// context's own peak - not the neck, which is whichever of the three
+	// consumptions was tightest.
+	if facts.CtxPeak < 40 {
 		s.Bump("sessions_under_40", 1)
 	}
-	if facts.Peak < 60 {
+	if facts.CtxPeak < 60 {
 		s.Bump("ctx_low", 1)
 	}
 	// The mirror of ctx_low, and the only way the ember branch can be reached
@@ -364,7 +374,19 @@ func CloseSession(factsPath, statePath string, now time.Time) {
 	if facts.Peak >= ImpulsivePeak {
 		s.Bump("impulsive", 1)
 	}
-	if facts.Peak >= 99.999 {
+	// ctx_maxed picks `feral` at level 3, and it had the same closed arithmetic
+	// `impulsive` had: its only source was the overflow, the one meal that
+	// TAKES XP away, so every point of it cost 15 XP while every meal that paid
+	// that back fed a rival counter. Its two siblings - short_sessions and
+	// long_sessions - cost nothing at all, so the branch could not be climbed.
+	//
+	// Now the three counters that read the ember branch are three notches of
+	// one gesture, and none of them is paid for in XP: 85 says you worked high
+	// up, 95 says you did it without easing off, 100 says you hit the wall.
+	if facts.Peak >= FeralPeak {
+		s.Bump("ctx_maxed", 1)
+	}
+	if facts.CtxPeak >= 99.999 {
 		s.Bump("ctx100_sessions", 1)
 	}
 	if duration >= 0 && duration < 15*60 {

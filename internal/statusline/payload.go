@@ -34,6 +34,7 @@ type Payload struct {
 	Cwd       string
 	Dirname   string
 	Effort    string
+	Style     string
 	Vim       string
 	Cost      *float64
 	Added     *float64
@@ -95,6 +96,23 @@ func asStr(v any) string {
 		return s
 	}
 	return ""
+}
+
+// defaultStyle is what the CLI puts in the payload when no output style is
+// set. It is not the absence of a value: `output_style: {name: Xe}` with
+// `Xe = oe?.outputStyle || "default"`, read out of the 2.1.259 binary rather
+// than assumed, so the field is ALWAYS there and it is usually this.
+const defaultStyle = "default"
+
+// outputStyle keeps the name only when it is worth a band. Painting the field
+// raw is what the bash statusline this replaces did, and it spends columns on
+// the word "default" to say that nothing is set - which is the one thing band 3
+// refuses to do, the same way the folder hides when it only repeats the repo.
+func outputStyle(name string) string {
+	if name == defaultStyle {
+		return ""
+	}
+	return name
 }
 
 var modelSuffix = regexp.MustCompile(`\s*\(.*\)\s*$`)
@@ -180,11 +198,22 @@ func gitStatus(dir string) (string, bool) {
 	if len(lines) == 0 || !strings.HasPrefix(lines[0], "## ") {
 		return "", false
 	}
+	// Three shapes come out of --branch, and only the first one carries an
+	// upstream: "main...origin/main", "HEAD (no branch)" when detached, and
+	// "No commits yet on main" in a repo with nothing committed. The last one
+	// used to fall through and land in the band verbatim, so a fresh repo said
+	// "(No commits yet on main)" where the branch goes. The porcelain format is
+	// not localised, so the sentence is safe to match on.
 	head := strings.TrimPrefix(lines[0], "## ")
-	if head == "HEAD (no branch)" {
+	switch {
+	case head == "HEAD (no branch)":
 		head = "HEAD"
-	} else if i := strings.Index(head, "..."); i >= 0 {
-		head = head[:i]
+	case strings.HasPrefix(head, "No commits yet on "):
+		head = strings.TrimPrefix(head, "No commits yet on ")
+	default:
+		if i := strings.Index(head, "..."); i >= 0 {
+			head = head[:i]
+		}
 	}
 	dirty := false
 	for _, line := range lines[1:] {
@@ -226,6 +255,7 @@ func Parse(doc map[string]any) *Payload {
 	}
 
 	p.Effort = asStr(dig(doc, "effort", "level"))
+	p.Style = outputStyle(asStr(dig(doc, "output_style", "name")))
 	p.Vim = asStr(dig(doc, "vim", "mode"))
 	p.Cost = asFloat(dig(doc, "cost", "total_cost_usd"))
 	p.Added = asFloat(dig(doc, "cost", "total_lines_added"))

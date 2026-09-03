@@ -23,6 +23,37 @@ import (
 // minWidthForPet is where the card stops fitting and the bands take the width.
 const minWidthForPet = 55
 
+// blankAnchor is U+2800, BRAILLE PATTERN BLANK: a character that paints as
+// nothing but is not a space.
+//
+// Claude Code TRIMS THE LEADING SPACES off every line of the statusline. A row
+// whose left half came out empty is then just "spaces, then the pet", and the
+// trim drops the lot: that row's slice of the sprite lands at column 0 while
+// the other three stay put, and the creature comes apart across the screen.
+//
+// Band 3 is the row this happens to - at the root of a repo the folder name
+// says nothing band 2 has not - and it happens on band 4 too on a pet with
+// neither bar nor bubble. One character the trim will not eat holds the row
+// where it belongs.
+const blankAnchor = "\u2800"
+
+// spokenIn hands back the bubble if the assembled band really carries it, and
+// "" if the band dropped it for width.
+func spokenIn(band, bubble string) string {
+	if bubble == "" || !strings.Contains(theme.Strip(band), bubble) {
+		return ""
+	}
+	return bubble
+}
+
+// anchored pins a row that would otherwise be nothing but padding.
+func anchored(row string) string {
+	if strings.TrimSpace(theme.Strip(row)) != "" {
+		return row
+	}
+	return blankAnchor + row
+}
+
 type rateFacts struct {
 	tps   *float64
 	apiMs *float64
@@ -92,24 +123,44 @@ func Run(stdin io.Reader, stdout io.Writer) error {
 	facts := session.Load(factsPath)
 	rate := measureRate(p, facts, float64(now.UnixNano())/1e9)
 
+	// The sweep is a ReadDir of the whole of $TMPDIR, and it used to run on
+	// every refresh that changed anything - which, while the model is
+	// answering, is every single one of them: total_api_duration_ms grows
+	// under it. What it collects is leftovers older than a DAY, so once per
+	// session is as often as it can possibly need to be. T0 is only zero
+	// before this session has written its first facts file.
+	firstRefresh := facts.T0 == 0
+
 	// A turn is a prompt, and the payload carries its id. Counted when the
 	// prompt changes, not on every refresh.
 	newTurn := p.PromptID != "" && facts.PromptID != p.PromptID
 
-	band1 := engine(p, rate.tps)
 	band2 := work(p)
 	band3 := quota(p)
 
 	var card Card
+	var creature *pet.State
 	haveCard := false
 	if showPet {
-		card = RenderCard(p, facts, rate, newTurn, columns >= BubbleMin, pet.Path(), now)
+		card, creature = RenderCard(p, facts, rate, newTurn, columns >= BubbleMin, pet.Path(), now)
 		haveCard = true
 		if card.Facts != nil && factsPath != "" {
 			session.Save(factsPath, *card.Facts)
-			session.Sweep(now)
+			if firstRefresh {
+				session.Sweep(now)
+			}
 		}
 	}
+
+	// Band 1 is built after the card, not before, because it borrows the
+	// creature's colour: the pill and the context bar are painted whatever the
+	// torso is painted. With the pet switched off there is no torso and band 1
+	// falls back to the palette it always had.
+	var accent *theme.Colour
+	if haveCard {
+		accent = &card.Body
+	}
+	band1 := engine(p, rate.tps, accent)
 
 	var lines []string
 	laidOut := false
@@ -129,21 +180,38 @@ func Run(stdin io.Reader, stdout io.Writer) error {
 		}
 		if fits {
 			laidOut = true
+			// Band 4 drops the bubble before anything else when it runs short,
+			// so whether the pet actually got a word in is only knowable once
+			// the band is assembled - and only in the branch that is really
+			// going to be printed. Clearing it before choosing the layout
+			// robbed the full-width fallback of a bubble that would have fit.
+			card.Bubble = spokenIn(left[3], card.Bubble)
 			for i, row := range left {
-				lines = append(lines, theme.PadRight(row, leftWidth)+
+				lines = append(lines, theme.PadRight(anchored(row), leftWidth)+
 					strings.Repeat(" ", cardGap)+card.Rows[i])
 			}
 		}
 	}
 	if !laidOut {
+		// Falling back to full-width bands re-assembles band 4 against a wider
+		// budget, so the bubble gets a second chance and is re-checked below.
 		lines = []string{
 			assemble(band1, width),
 			assemble(band2, width),
 			assemble(band3, width),
 		}
 		if haveCard {
-			lines = append(lines, assemble(petBand(card, columns), width))
+			band := assemble(petBand(card, columns), width)
+			card.Bubble = spokenIn(band, card.Bubble)
+			lines = append(lines, band)
 		}
+	}
+	if haveCard {
+		// The rung first: it is what keeps a broken streak from taking the
+		// shape back down the tree, and it must not depend on there having
+		// been a bubble to say so.
+		RememberShape(card, creature, pet.Path())
+		Spoke(card, creature, pet.Path(), now)
 	}
 
 	_, err := io.WriteString(stdout, NewFooter(width).Render(lines)+"\n")

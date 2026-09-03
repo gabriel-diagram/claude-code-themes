@@ -2,6 +2,7 @@ package pet
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -55,46 +56,48 @@ func TestEveryStateDrawsFiveRowsOfTheCardWidth(t *testing.T) {
 	}
 }
 
-// designReference is the silhouette the canvas draws in artboard 09, the one it
-// gives the four compact states for.
-var designReference = Sprite{
-	Crest: "  \\   /  ", Upper: " ▗▟███▙▖ ", Face: "▐█     █▌",
-	Lower: " ▝▜███▛▘ ", Feet: "  ▘   ▝  ",
-	OwnEyes: [2]rune{'>', '<'}, EyeCols: [2]int{3, 5},
-}
-
-func TestCompactMatchesTheCanvas(t *testing.T) {
-	// The canvas gives one worked example and its four states. That example is
-	// the specification: if these four come out, the rule is right.
-	Sprites["_canvas"] = designReference
-	defer delete(Sprites, "_canvas")
+// The compact row is artboard 09's option 9b: the torso, the face, and a third
+// row that is the lower contour squeezed to three cells with the form's own
+// feet on either side.
+//
+// It used to draw a FIXED "▘▝" pair there, the same two glyphs for all 27
+// forms. The atlas makes the foot count part of the form's identity, so the
+// compact row carries the form's own - which is what lets a six-legged telar
+// read differently from a two-legged monje in three rows.
+func TestTheCompactRowCarriesTheFormsOwnFeet(t *testing.T) {
 	t.Setenv("STATUSLINE_PET_WALK", "1")
-
-	fresh, tired, ko := Vitals[0], Vitals[4], KO
-	cases := []struct {
-		what string
-		v    Vital
-		step int
-		want string
-	}{
-		{"paso A", fresh, 0, " ▘▝▜█▛▝▘ "},
-		{"paso B", fresh, 1, " ▝▘▜█▛▘▝ "},
-		{"hundida", tired, 0, " ▖▗▜█▛▗▖ "},
-		{"k.o.", ko, 0, " ▄▄▀▀▀▄▄ "},
-	}
-	for _, tc := range cases {
-		got := strip(DrawCompact("_canvas", tc.v, tc.step, false)[2])
-		if got != tc.want {
-			t.Errorf("%s\n  motor  |%s|\n  lienzo |%s|", tc.what, got, tc.want)
+	for _, form := range []string{"spark", "bughunter", "loom", "leviathan"} {
+		sprite := Sprites[form]
+		for _, c := range []struct {
+			what string
+			v    Vital
+			step int
+			want string
+		}{
+			{"paso A", Vitals[0], 0, sprite.Feet},
+			{"paso B", Vitals[0], 1, sprite.Step},
+			{"quieta", Vitals[3], 0, sprite.Still},
+			{"k.o.", KO, 0, sprite.KO},
+		} {
+			row := []rune(strip(DrawCompact(form, c.v, c.step, false)[2]))
+			feet := []rune(c.want)
+			// the two cells either side of the three-cell body
+			for _, at := range [][2]int{{1, 1}, {2, 2}, {6, 6}, {7, 7}} {
+				if row[at[0]] != feet[at[1]] {
+					t.Errorf("%s %s: row %q does not carry %q at %d",
+						form, c.what, string(row), string(feet), at[0])
+				}
+			}
 		}
 	}
-	// And the two rows above it.
-	rows := DrawCompact("_canvas", fresh, 0, false)
-	if strip(rows[0]) != " ▗▟███▙▖ " {
-		t.Errorf("fila 1 = |%s|", strip(rows[0]))
-	}
-	if strip(rows[1]) != "▐█ > < █▌" {
-		t.Errorf("fila 2 = |%s|", strip(rows[1]))
+}
+
+func TestTheCompactBodyIsTheLowerContourSqueezed(t *testing.T) {
+	for form, sprite := range Sprites {
+		row := []rune(strip(DrawCompact(form, Vitals[0], 0, false)[2]))
+		if got, want := string(row[3:6]), squeeze(sprite.Lower); got != want {
+			t.Errorf("%s: body %q, want %q", form, got, want)
+		}
 	}
 }
 
@@ -120,12 +123,23 @@ func TestAnUnknownFormFallsBackToTheRoot(t *testing.T) {
 	}
 }
 
-func TestTheEvolutionKeepsItsEyesWhileIntact(t *testing.T) {
-	if !contains(strip(Draw("probe", Vitals[0], 0, false)[2]), "O") {
-		t.Error("fresh should keep the probe's own eyes")
-	}
-	if !contains(strip(Draw("probe", Vitals[4], 0, false)[2]), "_") {
-		t.Error("tired should override them")
+func TestTheEyesBelongToTheStateForEveryForm(t *testing.T) {
+	// They used to be half the form's identity - OwnEyes, kept while "intact"
+	// and surrendered from "easy" down. The atlas draws all 41 forms with the
+	// same pair at each state, and hands identity to the crest, the feet and
+	// the ramp instead.
+	want := map[string]string{"fresh": "> <", "easy": "o o", "tired": "_ _", "k.o.": "x x"}
+	for _, v := range Vitals {
+		glyphs, ok := want[v.Label]
+		if !ok {
+			continue
+		}
+		for _, form := range []string{"spark", "probe", "bughunter", "leviathan", "chimera"} {
+			face := strip(Draw(form, v, 0, false)[2])
+			if !contains(face, glyphs) {
+				t.Errorf("%s at %q = %q, want the state's %q", form, v.Label, face, glyphs)
+			}
+		}
 	}
 }
 
@@ -140,10 +154,17 @@ func TestHungerOnlyChangesTheColourNotTheGlyph(t *testing.T) {
 	}
 }
 
-func TestTheKOLiesDown(t *testing.T) {
+func TestTheKOLiesDownWithoutLosingAFoot(t *testing.T) {
+	// It used to sweep the feet row away entirely. The atlas lays them down
+	// instead - "lo tumba en k.o. sin perder la cuenta de patas" - because the
+	// foot count is half of what names the form.
 	rows := Draw("marathon", KO, 0, false)
-	if trimSpace(strip(rows[4])) != "" {
-		t.Errorf("the k.o. still has feet: %q", strip(rows[4]))
+	feet := strip(rows[4])
+	if trimSpace(feet) == "" {
+		t.Error("the k.o. swept the feet away")
+	}
+	if feet != Sprites["marathon"].KO {
+		t.Errorf("k.o. feet = %q, want %q", feet, Sprites["marathon"].KO)
 	}
 }
 
@@ -155,39 +176,69 @@ func TestStateForWalksTheThresholds(t *testing.T) {
 		78: "sluggish", 89: "tired", 99.9: "drowning", 100: "k.o.",
 	}
 	for usage, label := range want {
-		if got := StateFor(usage, nil).Label; got != label {
+		if got := StateFor(usage).Label; got != label {
 			t.Errorf("StateFor(%v) = %s, want %s", usage, got, label)
 		}
 	}
 }
 
-func TestTheKOHasItsOwnDoor(t *testing.T) {
-	// Context alone at 100 is a k.o.; without that the sprite never showed.
-	full := 100.0
-	if StateFor(50, &full).Label != "k.o." {
-		t.Error("context at 100% did not force the k.o.")
-	}
-	if StateFor(95, nil).Label != "drowning" {
-		t.Error("95 without ctx should still be drowning")
-	}
-}
-
-func TestTheWeightedBlendHandsAMissingWeightOver(t *testing.T) {
-	f := func(v float64) *float64 { return &v }
-	cases := []struct {
-		ctx, five, seven *float64
-		want             float64
-	}{
-		{f(50), nil, nil, 50},
-		{nil, nil, nil, 0},
-		{f(100), f(90), f(90), 95},
-	}
-	for _, tc := range cases {
-		if got := WeightedUsage(tc.ctx, tc.five, tc.seven); got != tc.want {
-			t.Errorf("WeightedUsage = %v, want %v", got, tc.want)
+func TestTheThresholdsAreTheFirstVersionsComfortCurve(t *testing.T) {
+	// The caps are not arbitrary and never were: they are
+	// vida = 100*(1-(neck/100)^2) - the quadratic the very first statusline.sh
+	// drew its face from - solved for the neck at the marks that version used,
+	// 95/80/60/40/20. If somebody nudges a cap, this says what it is nudging.
+	for _, c := range []struct {
+		vida float64
+		cap  float64
+	}{{95, 22}, {80, 45}, {60, 63}, {40, 78}, {20, 89}} {
+		neck := 100 * math.Sqrt(1-c.vida/100)
+		if math.Abs(neck-c.cap) > 0.6 {
+			t.Errorf("vida %v puts the neck at %.2f, but the cap is %v",
+				c.vida, neck, c.cap)
 		}
 	}
 }
+
+func TestTheNeckIsTheTightestAndNotTheAverage(t *testing.T) {
+	// A mean dilutes, and that is what it was doing: the context full at 100
+	// with the quotas at 20 and 10 came back as 58, which is "a gusto" - the
+	// pet reporting comfort with no window left to work in. The first version
+	// took the worst of the three on purpose: "refleja el cuello mas apretado".
+	f := func(v float64) *float64 { return &v }
+	nan := math.NaN()
+	for _, c := range []struct {
+		name             string
+		ctx, five, seven *float64
+		want             float64
+	}{
+		{"context alone", f(50), nil, nil, 50},
+		{"nothing at all", nil, nil, nil, 0},
+		{"the full window is the neck", f(100), f(20), f(10), 100},
+		{"a quota can be the neck too", f(50), f(95), f(90), 95},
+		{"the old blend would have said 95 here", f(100), f(90), f(90), 100},
+		{"NaN is not in the running", &nan, f(30), nil, 30},
+		{"out of range is clamped", f(140), nil, nil, 100},
+		{"and so is a negative", f(-5), nil, nil, 0},
+	} {
+		if got := Bottleneck(c.ctx, c.five, c.seven); got != c.want {
+			t.Errorf("%s: Bottleneck = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestTheKOArrivesWithoutASpecialDoor(t *testing.T) {
+	// StateFor used to take the context as a second argument purely so a full
+	// window could force the k.o., because a weighted mean of three numbers
+	// cannot reach 100 unless all three do. The neck reaches it on its own.
+	if got := StateFor(Bottleneck(ptr(100), ptr(20), ptr(10))).Label; got != "k.o." {
+		t.Errorf("a full context gave %q, want k.o.", got)
+	}
+	if got := StateFor(Bottleneck(ptr(95), ptr(30), ptr(20))).Label; got != "drowning" {
+		t.Errorf("95 gave %q, want drowning", got)
+	}
+}
+
+func ptr(v float64) *float64 { return &v }
 
 // --- the tree --------------------------------------------------------------
 
@@ -229,10 +280,16 @@ func TestEveryLevelFiveMarkHasAnUnlock(t *testing.T) {
 }
 
 func TestEveryForkHasADecidingCounter(t *testing.T) {
-	for _, kids := range Tree {
+	for parent, kids := range Tree {
 		for _, kid := range kids {
 			_, branch := BranchBy[kid]
 			_, unlock := Unlocks[kid]
+			// A title is the one child of its mark, and what decides it is the
+			// mark's own habit at TitleFactor times over - not a fork between
+			// siblings, so it has no BranchBy of its own.
+			if _, title := TitleUnlock(parent); title && Titles[parent] == kid {
+				continue
+			}
 			if !branch && !unlock {
 				t.Errorf("%s is decided by nothing", kid)
 			}
@@ -328,7 +385,7 @@ func TestNextThresholdRunsOutAtTheTop(t *testing.T) {
 	if xp, ok := NextThreshold(0); !ok || xp != 60 {
 		t.Errorf("NextThreshold(0) = %d,%v", xp, ok)
 	}
-	if _, ok := NextThreshold(900); ok {
+	if _, ok := NextThreshold(1900); ok {
 		t.Error("there is something after level 5")
 	}
 }
@@ -746,15 +803,47 @@ func TestSilenceByDefault(t *testing.T) {
 	}
 }
 
-func TestTheCooldownGagsIt(t *testing.T) {
+// say is Speak followed by Remember: what happens to a bubble that reaches the
+// screen. Speak on its own no longer books anything, because a bubble the band
+// drops for width must not spend the cooldown.
+func say(s *State, e Event, form string, now time.Time, pick func(int) int) string {
+	line := Speak(s, e, form, now, pick)
+	Remember(s, line, now)
+	return line
+}
+
+func TestSpeakOnItsOwnBooksNothing(t *testing.T) {
+	// The bug this split exists for: the bubble is the first thing band 4
+	// drops when it runs short, and booking the line before it reached the
+	// screen burned five minutes of silence for something nobody read.
 	s := New()
 	if Speak(s, EventBigMeal, "refactor", t0, first) == "" {
 		t.Fatal("said nothing on a big meal")
 	}
-	if line := Speak(s, EventBigMeal, "refactor", t0.Add(SpeechCooldown-time.Second), first); line != "" {
+	if s.SaidAt != 0 || len(s.Said) != 0 {
+		t.Errorf("Speak booked the line by itself: said=%v at=%d", s.Said, s.SaidAt)
+	}
+	// Unspoken means unbooked: the very next refresh may try again.
+	if Speak(s, EventBigMeal, "refactor", t0.Add(time.Second), first) == "" {
+		t.Error("a line that never reached the screen still started the cooldown")
+	}
+	// And once it does reach the screen, it books.
+	line := Speak(s, EventBigMeal, "refactor", t0, first)
+	Remember(s, line, t0)
+	if s.SaidAt == 0 || len(s.Said) != 1 {
+		t.Errorf("Remember booked nothing: said=%v at=%d", s.Said, s.SaidAt)
+	}
+}
+
+func TestTheCooldownGagsIt(t *testing.T) {
+	s := New()
+	if say(s, EventBigMeal, "refactor", t0, first) == "" {
+		t.Fatal("said nothing on a big meal")
+	}
+	if line := say(s, EventBigMeal, "refactor", t0.Add(SpeechCooldown-time.Second), first); line != "" {
 		t.Errorf("spoke inside the cooldown: %q", line)
 	}
-	if Speak(s, EventBigMeal, "refactor", t0.Add(SpeechCooldown), first) == "" {
+	if say(s, EventBigMeal, "refactor", t0.Add(SpeechCooldown), first) == "" {
 		t.Error("still silent once the cooldown was up")
 	}
 }
@@ -764,7 +853,7 @@ func TestItDoesNotRepeatItself(t *testing.T) {
 	said := map[string]bool{}
 	at := t0
 	for i := 0; i < len(Repertoire["refactor"]); i++ {
-		line := Speak(s, EventBigMeal, "refactor", at, first)
+		line := say(s, EventBigMeal, "refactor", at, first)
 		if line == "" {
 			t.Fatalf("silent on round %d", i)
 		}
@@ -778,7 +867,7 @@ func TestItDoesNotRepeatItself(t *testing.T) {
 		t.Errorf("remembers %d lines, want %d", len(s.Said), SaidMemory)
 	}
 	// Exhausted: it starts over rather than going mute.
-	if Speak(s, EventBigMeal, "refactor", at, first) == "" {
+	if say(s, EventBigMeal, "refactor", at, first) == "" {
 		t.Error("went mute once the repertoire ran out")
 	}
 }
@@ -855,7 +944,7 @@ func TestTheXPBarMeasuresTheLevelNotTheTotal(t *testing.T) {
 }
 
 func TestTheXPStretchRunsOutAtTheTop(t *testing.T) {
-	for _, xp := range []int{900, 1200, 99999} {
+	for _, xp := range []int{1900, 2400, 99999} {
 		if _, _, ok := LevelProgress(xp); ok {
 			t.Errorf("xp %d still has a stretch above it", xp)
 		}
@@ -899,7 +988,10 @@ func TestAtTheTopTheProgressBecomesTheHabit(t *testing.T) {
 	}
 }
 
-func TestAPetWearingItsMarkHasNothingLeftToReach(t *testing.T) {
+func TestAMarkStillHasItsTitleToReach(t *testing.T) {
+	// The mark used to be the end of the road. There is a title behind each
+	// one now, asking for the same habit TitleFactor times over, so band 4
+	// keeps a bar to fill.
 	s := New()
 	s.XP = 900
 	s.Counters["inquisitive"] = 5
@@ -909,8 +1001,23 @@ func TestAPetWearingItsMarkHasNothingLeftToReach(t *testing.T) {
 	if form != "exterminator" {
 		t.Fatalf("form is %q, want exterminator", form)
 	}
-	if _, ok := NextMark(s, form); ok {
-		t.Error("a pet already wearing its mark was offered another")
+	mark, ok := NextMark(s, form)
+	if !ok {
+		t.Fatal("a pet wearing its mark was offered nothing to reach")
+	}
+	if mark.Form != "wasp" || mark.Threshold != Unlocks["exterminator"].Threshold*TitleFactor {
+		t.Errorf("next = %s at %d/%d, want wasp at %d",
+			mark.Form, mark.Done, mark.Threshold, Unlocks["exterminator"].Threshold*TitleFactor)
+	}
+	// And a pet wearing the TITLE has nothing beyond it.
+	s.XP = 1900
+	s.Counters["test_streak"] = Unlocks["exterminator"].Threshold * TitleFactor
+	title, _ := CurrentForm(s)
+	if title != "wasp" {
+		t.Fatalf("form is %q, want wasp", title)
+	}
+	if _, ok := NextMark(s, title); ok {
+		t.Error("a pet already wearing its title was offered another")
 	}
 }
 
@@ -950,7 +1057,7 @@ func TestAHabitPastItsThresholdDoesNotOverflowTheBar(t *testing.T) {
 }
 
 func TestEveryFormInTheTreeHasASpanishName(t *testing.T) {
-	// The canvas names all 27. A form that reaches the panel without one
+	// The canvas names all 41. A form that reaches the panel without one
 	// would print its id in the middle of a Spanish sentence.
 	seen := map[string]bool{Root: true}
 	for parent, kids := range Tree {
@@ -962,7 +1069,7 @@ func TestEveryFormInTheTreeHasASpanishName(t *testing.T) {
 	for _, secret := range Secrets {
 		seen[secret] = true
 	}
-	if len(seen) != 27 {
+	if len(seen) != 41 {
 		t.Errorf("the tree has %d forms, the canvas draws 27", len(seen))
 	}
 	for form := range seen {
@@ -1043,7 +1150,7 @@ func TestTheXPHasACeiling(t *testing.T) {
 	if s.XP != XPCeiling {
 		t.Errorf("xp went to %d, want it capped at %d", s.XP, XPCeiling)
 	}
-	if LevelFor(s.XP) != 5 {
+	if LevelFor(s.XP) != 6 {
 		t.Errorf("the ceiling dropped the pet to level %d, want it at the top",
 			LevelFor(s.XP))
 	}
@@ -1089,7 +1196,7 @@ func TestStarvingDrainsTheXP(t *testing.T) {
 func TestStarvingCanCostALevelButNeverKills(t *testing.T) {
 	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
 	s := New()
-	s.XP, s.Hunger = Levels[len(Levels)-1].XP, HungerMax // level 5, at the line
+	s.XP, s.Hunger = Levels[4].XP, HungerMax // level 5, at the line
 	s.LastFed = now.Unix()
 
 	DecayHunger(s, now.Add(2*time.Hour))
@@ -1251,7 +1358,7 @@ func TestItNeverSaysTheSameLineTwiceRunning(t *testing.T) {
 		previous := ""
 		for i := 0; i < 40; i++ {
 			at := now.Add(time.Duration(i) * 10 * time.Minute)
-			line := Speak(s, EventBigMeal, form, at, nil)
+			line := say(s, EventBigMeal, form, at, nil)
 			if line == "" {
 				t.Fatalf("%s went quiet on turn %d", form, i)
 			}
@@ -1309,6 +1416,8 @@ func reach(form string) *State {
 		s.XP = Levels[1].XP
 	case 3:
 		s.XP = Levels[2].XP
+	case 4:
+		s.XP = Levels[4].XP // a mark opens at level 5
 	default:
 		s.XP = Levels[len(Levels)-1].XP
 	}
@@ -1318,6 +1427,13 @@ func reach(form string) *State {
 		}
 		if u, ok := Unlocks[step]; ok {
 			s.Counters[u.Counter] = u.Threshold
+		}
+		// A title asks for its mark's habit TitleFactor times over, so the
+		// state that reaches one has to carry the bigger number.
+		if parent, ok := Parent[step]; ok && Titles[parent] == step {
+			if u, ok := TitleUnlock(parent); ok {
+				s.Counters[u.Counter] = u.Threshold
+			}
 		}
 	}
 	return s
@@ -1341,7 +1457,7 @@ func TestEveryFormCanActuallyBeReached(t *testing.T) {
 func TestBothSecretsCanBeReached(t *testing.T) {
 	for _, secret := range Secrets {
 		s := New()
-		s.XP = Levels[len(Levels)-1].XP
+		s.XP = Levels[4].XP // level 5: a secret is not a title
 		s.Secret = Secret(secret)
 		if got, level := CurrentForm(s); got != secret || level != 5 {
 			t.Errorf("%s is unreachable: gives %s/%d", secret, got, level)
@@ -1369,6 +1485,10 @@ func TestEveryCounterTheTreeNeedsHasAFeeder(t *testing.T) {
 		"sessions_15min": true, "short_sessions": true, "sessions_4h": true,
 		"long_sessions": true, "same_repo_days": true, "docs_days": true,
 		"widest_commit": true, "ctx100_sessions": true, "bypass_turns": true,
+		// The ember branch, all three notches of it, paid from the session's
+		// context peak in hook.CloseSession. They used to hang off the overflow
+		// meal, which is the one that TAKES XP: see the comment there.
+		"impulsive": true, "ctx_maxed": true,
 	}
 	for _, food := range Foods {
 		for _, habit := range food.Habits {

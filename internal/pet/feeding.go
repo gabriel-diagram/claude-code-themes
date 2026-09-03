@@ -52,17 +52,32 @@ type Food struct {
 
 // Foods, by event name.
 var Foods = map[string]Food{
-	"tests":    {15, -4, TestsCooldown, "tests en verde", []string{"inquisitive", "tests", "test_streak"}},
-	"commit":   {12, -3, 0, "commit", []string{"methodical", "diffs", "diff_streak"}},
-	"compact":  {8, -3, 0, "compact", []string{"methodical"}},
-	"task":     {6, -1, 0, "tarea del plan", []string{"inquisitive", "plans"}},
-	"feed":     {3, -2, FeedCooldown, "/feed", nil},
-	"overflow": {-15, 0, 0, "contexto al 100%", []string{"impulsive", "ctx_maxed"}},
+	"tests":   {15, -4, TestsCooldown, "tests en verde", []string{"inquisitive", "tests", "test_streak"}},
+	"commit":  {12, -3, 0, "commit", []string{"methodical", "diffs", "diff_streak"}},
+	"compact": {8, -3, 0, "compact", []string{"methodical"}},
+	"task":    {6, -1, 0, "tarea del plan", []string{"inquisitive", "plans"}},
+	"feed":    {3, -2, FeedCooldown, "/feed", nil},
+	// The overflow feeds NO habit. It used to carry impulsive and ctx_maxed,
+	// which is what closed the arithmetic on the whole ember branch: the only
+	// way to earn those two counters was the only meal that takes XP away. Both
+	// are paid from the session's context peak now, in hook.CloseSession, so
+	// this is what it always should have been - a penalty, and a streak breaker.
+	"overflow": {-15, 0, 0, "contexto al 100%", nil},
 }
 
 // BigMeal is what the pet considers worth talking about: a green suite or a
 // commit, not a compact or a hand-feed. See speech.go.
 func BigMeal(event string) bool { return Foods[event].XP >= 12 }
+
+// BigMealWindow is how long after eating one the pet still has something to
+// say about it - which is how long the bubble stays on screen.
+//
+// It was ten seconds, chosen as "a refresh or two", and ten seconds is not
+// long enough to be seen: it is the only door that opens at all for somebody
+// who commits regularly, keeps a full belly and has no streak going, and it
+// shut before they looked up. A minute is still an event and not a chat, and
+// the five-minute cooldown is what actually keeps the pet quiet.
+const BigMealWindow = 60 * time.Second
 
 // streaksBrokenBy: a clean streak breaks when you blow the context.
 var streaksBrokenBy = map[string][]string{
@@ -232,7 +247,10 @@ func CheckSecrets(s *State) {
 	// from the two forms allowed to get that far. HungerPeak is zeroed when the
 	// session closes.
 	if s.Hunger == 0 && s.HungerPeak >= HungerMax {
-		if form, _ := CurrentForm(s); form == "feral" || form == "marathon" {
+		// walk, not CurrentForm: this asks which branch the counters put the
+		// pet on today, and CurrentForm answers a different question - what it
+		// LOOKS like, which never goes back down a rung. See pet.walk.
+		if form, _ := walk(s); form == "feral" || form == "marathon" {
 			s.Secret = "phoenix"
 			return
 		}

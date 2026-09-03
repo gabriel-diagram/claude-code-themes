@@ -23,8 +23,16 @@ const MaxAge = 24 * time.Hour
 
 // Facts is what the statusline carries from one refresh to the next.
 type Facts struct {
-	Label    string   `json:"label"`
-	Peak     float64  `json:"peak"`
+	Label string  `json:"label"`
+	Peak  float64 `json:"peak"`
+
+	// CtxPeak is the context's OWN peak, kept apart from Peak now that Peak is
+	// the tightest of the three necks. Half the counters are named for context
+	// and mean it - ctx_low, sessions_under_40, ctx100_sessions - and reading
+	// them off the neck would credit "3 sessions touching 100% of context" to
+	// somebody who never filled the window and only ran out of 5h quota.
+	CtxPeak float64 `json:"ctx_peak"`
+
 	T0       int64    `json:"t0"`
 	Repo     string   `json:"repo"`
 	PromptID string   `json:"prompt_id"`
@@ -122,6 +130,13 @@ func Load(path string) Facts {
 	_, hasPeak := doc["peak"]
 	_, hasT0 := doc["t0"]
 	f.Structured = hasPeak || hasT0
+	// A file written before the two peaks were told apart has only the one.
+	// Falling back keeps a session that spans an upgrade from reading as a
+	// context that never rose above zero, which would hand out ctx_low and
+	// sessions_under_40 for free.
+	if _, has := doc["ctx_peak"]; !has {
+		f.CtxPeak = f.Peak
+	}
 	return f
 }
 

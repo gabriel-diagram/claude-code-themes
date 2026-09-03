@@ -57,28 +57,71 @@ type LogEntry struct {
 // State is the whole life file. Field order matches the file written by the
 // Python this replaces, so an upgrade in either direction is a no-op.
 type State struct {
-	XP         int               `json:"xp"`
-	Hunger     int               `json:"hunger"`
-	LastFed    int64             `json:"last_fed"`
-	Streak     int               `json:"streak"`
-	BestStreak int               `json:"best_streak"`
-	LevelSeen  int               `json:"level_seen"`
-	HungerPeak int               `json:"hunger_peak"`
-	FedAt      int64             `json:"fed_at"`
-	AteAt      int64             `json:"ate_at"`
-	LastDay    string            `json:"last_day"`
-	RepoDay    string            `json:"repo_day"`
-	LogDay     string            `json:"log_day"`
-	Secret     Secret            `json:"secret"`
-	Counters   map[string]int    `json:"counters"`
-	Meals      map[string]int64  `json:"meals"`
-	Log        []LogEntry        `json:"log"`
-	DayMarks   map[string]string `json:"day_marks"`
+	XP         int    `json:"xp"`
+	Hunger     int    `json:"hunger"`
+	LastFed    int64  `json:"last_fed"`
+	Streak     int    `json:"streak"`
+	BestStreak int    `json:"best_streak"`
+	LevelSeen  int    `json:"level_seen"`
+	HungerPeak int    `json:"hunger_peak"`
+	FedAt      int64  `json:"fed_at"`
+	AteAt      int64  `json:"ate_at"`
+	LastDay    string `json:"last_day"`
+	RepoDay    string `json:"repo_day"`
+	LogDay     string `json:"log_day"`
+	Secret     Secret `json:"secret"`
+
+	// FormSeen is the highest rung the shape has ever stood on. The walk is
+	// recomputed from the counters every refresh and two habits can fall back
+	// to zero, so without this a broken streak took the shape down the tree
+	// with it. See pet.Tier and pet.RememberForm.
+	//
+	// Absent from an older file, which is exactly right: an empty name is tier
+	// 0 and holds nothing back, so the first refresh records whatever the pet
+	// already is and the floor starts from there.
+	FormSeen string `json:"form_seen"`
+
+	Counters map[string]int    `json:"counters"`
+	Meals    map[string]int64  `json:"meals"`
+	Log      []LogEntry        `json:"log"`
+	DayMarks map[string]string `json:"day_marks"`
 
 	// What the pet has said lately, so it does not repeat itself, and when.
 	// See speech.go.
 	Said   []string `json:"said"`
 	SaidAt int64    `json:"said_at"`
+}
+
+// Clone is a State that shares nothing with the one it came from.
+//
+// `copy := *s` looks like a copy and is not: five of these fields are maps and
+// slices, so the copy keeps pointing at the original's containers and a write
+// through either one is a write through both. The panel builds a hypothetical
+// pet to ask what the next level would turn it into, and today nothing on that
+// path writes to a counter - so the shallow copy was correct by luck, and one
+// added Bump away from silently editing the real pet while answering a
+// question about an imaginary one.
+//
+// Cloning costs a few dozen map entries once per `/pet`, which is not a price
+// worth reasoning about.
+func (s *State) Clone() *State {
+	out := *s
+	out.Counters = make(map[string]int, len(s.Counters))
+	for k, v := range s.Counters {
+		out.Counters[k] = v
+	}
+	out.Meals = make(map[string]int64, len(s.Meals))
+	for k, v := range s.Meals {
+		out.Meals[k] = v
+	}
+	out.DayMarks = make(map[string]string, len(s.DayMarks))
+	for k, v := range s.DayMarks {
+		out.DayMarks[k] = v
+	}
+	// LogEntry and string are values, so copying the backing array is enough.
+	out.Log = append([]LogEntry(nil), s.Log...)
+	out.Said = append([]string(nil), s.Said...)
+	return &out
 }
 
 // New is a newborn pet.
@@ -214,6 +257,20 @@ func Load(path string) *State {
 		}
 	}
 
+	// The rung the shape stands on, through the same gate the secret goes
+	// through: a v1 name is translated, and a name that is not a form at all is
+	// dropped rather than kept. Tier would read an unknown name as 0 and let it
+	// past harmlessly, but a floor is exactly the field where "harmless
+	// nonsense" should not be stored in the first place.
+	if form := asString(flat["form_seen"]); form != "" {
+		if translated, ok := legacyForms[form]; ok {
+			form = translated
+		}
+		if _, ok := Sprites[form]; ok {
+			s.FormSeen = form
+		}
+	}
+
 	if counters, ok := flat["counters"].(map[string]any); ok {
 		for k, v := range counters {
 			if newKey, ok := legacyCounters[k]; ok {
@@ -287,6 +344,26 @@ func Load(path string) *State {
 // ever reads half a json; what CAN be lost is a concurrent write, which is why
 // Feed does read-modify-write in one piece.
 func Save(s *State, path string) bool {
+	// The rung, before anything else, because it is not decoration: it is a
+	// field that has to agree with the state being written, exactly like the
+	// nil containers below.
+	//
+	// Doing it here rather than at each call site is the whole point. Six
+	// different paths persist this file - the statusline, a bubble, an
+	// overflow, `ccpet count`, `ccpet <food>`, the session close - and only two
+	// of them had any reason to think about shapes. With the statusline
+	// switched off a pet could stand at rung 6 for weeks with form_seen never
+	// written at all, and then one blown context dropped it to rung 3 AND
+	// recorded the fall as the truth, so the floor came into existence pointing
+	// at the wrong rung. The bug is not that a path forgot; it is that
+	// forgetting was possible.
+	//
+	// RememberForm only ever raises, so a save that happens to catch the pet
+	// mid-fall - book() writes right after an overflow has broken a streak -
+	// cannot write the fall down.
+	if form, _ := CurrentForm(s); form != "" {
+		RememberForm(s, form)
+	}
 	if s.Counters == nil {
 		s.Counters = map[string]int{}
 	}

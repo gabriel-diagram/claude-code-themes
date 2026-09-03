@@ -113,8 +113,11 @@ func eat(out io.Writer, statePath, event, note string, now time.Time) int {
 		}
 		return 0
 	}
-	pet.Save(s, statePath)
 	after, _ := pet.CurrentForm(s)
+	// Worked out before the write, not after, so the rung it has just reached
+	// goes into the same save as the meal that got it there.
+	pet.RememberForm(s, after)
+	pet.Save(s, statePath)
 
 	food := pet.Foods[event]
 	tint := theme.Ident
@@ -147,12 +150,17 @@ func lineage(form string) []string {
 	return trail
 }
 
-// nextMark is NextMark with the top-of-the-ladder check in front of it, so the
-// tree is not walked on every panel that still has XP left to earn.
-func nextMark(s *pet.State, form string, hasUpcoming bool) (pet.Mark, bool) {
-	if hasUpcoming {
-		return pet.Mark{}, false
-	}
+// nextMark is what the pet is working towards that is NOT xp: the mark its
+// trade opens, or - once it wears one - the title behind it, which asks for the
+// same habit TitleFactor times over.
+//
+// It used to be hidden while there was still a level to climb, on the grounds
+// that one bar at a time is enough. That made the whole habit system invisible:
+// a pet spends most of its life with xp left to earn, so the line only ever
+// showed at the very top, and nothing anywhere told you what a mark or a title
+// actually asks for. The panel has room for both bars; the statusline, which
+// has room for one, still shows xp first.
+func nextMark(s *pet.State, form string) (pet.Mark, bool) {
 	return pet.NextMark(s, form)
 }
 
@@ -177,16 +185,18 @@ func showPanel(out io.Writer, statePath string, now time.Time) int {
 	pet.DecayHunger(s, now)
 	form, level := pet.CurrentForm(s)
 
-	rows := pet.Draw(form, pet.StateFor(panelUsage, nil), 0, s.Hunger >= pet.HungerWarn)
+	rows := pet.Draw(form, pet.StateFor(panelUsage), 0, s.Hunger >= pet.HungerWarn)
 	trail := lineage(form)
 
 	// How much XP is missing, and what it would turn into.
 	upcomingXP, hasUpcoming := pet.NextThreshold(s.XP)
 	upcoming := ""
 	if hasUpcoming {
-		ghost := *s
+		// Clone, not `*s`: the ghost is a question, and a question must not be
+		// able to write to the pet it is about. See pet.State.Clone.
+		ghost := s.Clone()
 		ghost.XP = upcomingXP
-		if candidate, _ := pet.CurrentForm(&ghost); candidate != form {
+		if candidate, _ := pet.CurrentForm(ghost); candidate != form {
 			upcoming = candidate
 		}
 	}
@@ -226,7 +236,7 @@ func showPanel(out io.Writer, statePath string, now time.Time) int {
 	// Out of levels is not out of tree. The canvas: "las ramificaciones no
 	// dependen de la XP sino del hábito" - so at the top the row that still
 	// moves is the habit, and it says which mark it opens.
-	if mark, ok := nextMark(s, form, hasUpcoming); ok {
+	if mark, ok := nextMark(s, form); ok {
 		nl("  " + dim + "marca  " + reset +
 			theme.Bar(float64(mark.Done), float64(mark.Threshold), 16,
 				theme.Number, theme.CtxEmpty) +

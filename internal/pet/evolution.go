@@ -1,7 +1,13 @@
 package pet
 
-// The progress layer. Accumulated XP sets the level, and the level never goes
-// down. At every fork the branch is not chosen by the user but by whichever
+// The progress layer. Accumulated XP sets the level, and the SHAPE never goes
+// back down the tree - see floor. The level itself does: XP falls when the
+// context blows (-15) and while the pet goes hungry, so a level can be lost,
+// which TestStarvingCanCostALevelButNeverKills has always said and this
+// comment used to deny. TestTheLevelNeverGoesDown is about LevelFor being
+// monotonic in XP, which is a different claim and the only one that holds.
+//
+// At every fork the branch is not chosen by the user but by whichever
 // behaviour counter is highest at that moment, so the shape you end up with is
 // a readout of how you work.
 
@@ -21,6 +27,25 @@ var Tree = map[string][]string{
 	"sprinter":  {"bolt", "sniper"},
 	"marathon":  {"ox", "mole"},
 	"feral":     {"gremlin", "kraken"},
+
+	// Level 6, the titles: the final shape of each branch, one per mark. The
+	// canvas calls the tier "nivel 5 · títulos - la forma final de cada rama"
+	// and numbers the marks one lower than we do; the shape of the tree is the
+	// same either way, and renumbering would move every XP threshold.
+	"surgeon":      {"scalpel"},
+	"weaver":       {"loom"},
+	"monk":         {"abbot"},
+	"gardener":     {"forest"},
+	"bloodhound":   {"wolf"},
+	"exterminator": {"wasp"},
+	"cartographer": {"atlas"},
+	"oracle":       {"sphinx"},
+	"bolt":         {"storm"},
+	"sniper":       {"falcon"},
+	"ox":           {"mammoth"},
+	"mole":         {"worm"},
+	"gremlin":      {"devil"},
+	"kraken":       {"leviathan"},
 }
 
 // Parent is Tree inverted.
@@ -41,7 +66,11 @@ type Level struct {
 }
 
 // Levels: accumulated XP -> level.
-var Levels = []Level{{0, 1}, {60, 2}, {180, 3}, {400, 4}, {900, 5}}
+//
+// Six now. The sixth is the titles, and it sits where a week of level 5 puts
+// you: the gaps have been running 60, 120, 220, 500, so 1000 more after 900 is
+// the same curve continued rather than a wall.
+var Levels = []Level{{0, 1}, {60, 2}, {180, 3}, {400, 4}, {900, 5}, {1900, 6}}
 
 // BranchBy names the counter that decides each fork. Highest wins on level-up.
 var BranchBy = map[string]string{
@@ -75,7 +104,63 @@ var Unlocks = map[string]Unlock{
 	"kraken":       {"ctx100_sessions", 3},
 }
 
-// Secrets are the two level-5 forms that do not come off the tree.
+// Titles are the level-6 forms, one per mark: "la forma final de cada rama".
+// Each asks for MORE of the same habit its mark asked for - a bloodhound that
+// reproduced ten bugs before fixing them becomes a wolf at twenty.
+//
+// The rule is ONE number: a title asks TWICE what its mark asked. That was not
+// the first attempt. The first was three times, and measuring what the counters
+// actually do in a day of normal use (4 green suites, 5 commits, 6 plan tasks)
+// showed what a flat multiplier does to counters that do not share a pace:
+//
+//	diff_streak         5   a day      bypass_turns       30   a day
+//	test_streak         4   a day      repro_before_fix    1   a day
+//	single_tool_tasks   2   a day      sessions_4h         0.4 a day
+//	same_repo_days      1   a day      ctx100_sessions     0.3 a day
+//	sessions_15min      0.5 a day      widest_commit       a record, not a rate
+//
+// Three times a counter that moves thirty times a day is three days; three
+// times one that moves twice a week is two months. The fourteen titles came out
+// spread from 3 days to 60.
+//
+// Doubling does not flatten that spread, and deliberately so: the spread is in
+// the MARKS, which are the canvas's own design - a gardener is two days and a
+// bolt is twenty. Doubling keeps each branch's character and only stops the
+// multiplier from exaggerating it. It also guarantees the thing three-times did
+// not: a title always asks strictly more than the mark under it, so the chain
+// can never invert. TestATitleNeverAsksLessThanItsMark holds the line.
+const TitleFactor = 2
+
+// Titles maps each mark to the title it opens.
+var Titles = map[string]string{
+	"surgeon": "scalpel", "weaver": "loom", "monk": "abbot", "gardener": "forest",
+	"bloodhound": "wolf", "exterminator": "wasp", "cartographer": "atlas",
+	"oracle": "sphinx", "bolt": "storm", "sniper": "falcon", "ox": "mammoth",
+	"mole": "worm", "gremlin": "devil", "kraken": "leviathan",
+}
+
+// TitleOverrides are the titles the doubling gets wrong, and why.
+var TitleOverrides = map[string]int{
+	// bypass_turns moves thirty times a day, so both the mark and twice it are
+	// over inside a day. The only counter where doubling is not enough.
+	"devil": 200,
+}
+
+// TitleUnlock is what the title behind a mark asks for: its counter, at twice
+// the threshold, unless the counter's pace makes that meaningless.
+func TitleUnlock(mark string) (Unlock, bool) {
+	base, ok := Unlocks[mark]
+	if !ok {
+		return Unlock{}, false
+	}
+	threshold := base.Threshold * TitleFactor
+	if over, ok := TitleOverrides[Titles[mark]]; ok {
+		threshold = over
+	}
+	return Unlock{base.Counter, threshold}, true
+}
+
+// Secrets are the two forms that do not come off the tree.
 var Secrets = [2]string{"phoenix", "chimera"}
 
 // Temperaments are the three level-2 counters, which the chimera compares.
@@ -163,16 +248,13 @@ func (m Mark) Share() float64 {
 // CurrentForm, and asking for it keeps this from walking the tree a second
 // time on every refresh - and from disagreeing with the form on screen.
 func NextMark(s *State, form string) (Mark, bool) {
+	// A pet wearing a mark is not finished any more: there is a title behind
+	// it, asking for the same habit three times over. Only a title has nothing
+	// left to reach.
 	if _, worn := Unlocks[form]; worn {
-		return Mark{}, false
-	}
-
-	var best Mark
-	found := false
-	for _, kid := range Tree[form] {
-		u, ok := Unlocks[kid]
-		if !ok || u.Threshold <= 0 {
-			continue
+		u, ok := TitleUnlock(form)
+		if !ok {
+			return Mark{}, false
 		}
 		done := s.Counters[u.Counter]
 		if done < 0 {
@@ -181,12 +263,142 @@ func NextMark(s *State, form string) (Mark, bool) {
 		if done > u.Threshold {
 			done = u.Threshold
 		}
-		candidate := Mark{Form: kid, Counter: u.Counter, Done: done, Threshold: u.Threshold}
-		if !found || candidate.Share() > best.Share() {
-			best, found = candidate, true
+		return Mark{Titles[form], u.Counter, done, u.Threshold}, true
+	}
+	if _, isTitle := titleForms[form]; isTitle {
+		return Mark{}, false
+	}
+
+	// The same choice CurrentForm makes, so the mark the bar names is the mark
+	// the walk would hand over. Unearned siblings count here - that is the
+	// point of the bar - but the ranking is the identical ripeness, which is
+	// why the two can no longer disagree.
+	kid, ok := ripestMark(s, Tree[form], false)
+	if !ok {
+		return Mark{}, false
+	}
+	u := Unlocks[kid]
+	done := s.Counters[u.Counter]
+	if done < 0 {
+		done = 0
+	}
+	// Clamped for the DISPLAY only: a bar does not overflow. The choice above
+	// deliberately saw the uncapped number.
+	if done > u.Threshold {
+		done = u.Threshold
+	}
+	return Mark{Form: kid, Counter: u.Counter, Done: done, Threshold: u.Threshold}, true
+}
+
+// ripestMark picks between siblings that are opened by a habit rather than by
+// a counter race: the one whose habit has come FURTHEST relative to what it
+// asks. A tie falls back to the order the design lists them in, same as
+// topBranch. With met=true only siblings already earned can win, which is what
+// CurrentForm needs; with met=false the nearest one wins even unearned, which
+// is what the bar in band 4 points at.
+//
+// It used to be "the first sibling in the list whose threshold is met", and
+// that quietly amputated half the tree. Every counter here only ever goes UP,
+// so the first sibling to cross its line kept the branch for good: once you
+// had five sessions under 40% context you were a monk, and `gardener` - and
+// `forest` behind it - stopped existing for that pet, no matter how many days
+// of docs you wrote afterwards. Four of the seven pairs were already dead on
+// this machine's own pet.json, which is eight of the forty-one forms gone.
+//
+// Comparing the RATIO instead keeps every mark reachable forever: whichever
+// habit you push hardest, measured against what that habit asks, is the one
+// you wear. It also makes this agree with NextMark, which was already choosing
+// by share - so the bar can no longer promise a mark the walk would refuse.
+func ripestMark(s *State, kids []string, met bool) (string, bool) {
+	best, bestRipeness, found := "", 0.0, false
+	for _, kid := range kids {
+		u, ok := Unlocks[kid]
+		if !ok || u.Threshold <= 0 {
+			continue
+		}
+		done := s.Counters[u.Counter]
+		if done < 0 {
+			done = 0
+		}
+		if met && done < u.Threshold {
+			continue
+		}
+		// Uncapped on purpose: capping at 1 would tie every earned sibling and
+		// hand the branch back to list order, which is the bug this replaces.
+		if ripeness := float64(done) / float64(u.Threshold); !found || ripeness > bestRipeness {
+			best, bestRipeness, found = kid, ripeness, true
 		}
 	}
 	return best, found
+}
+
+// Tier is the rung a FORM sits on: 1 for the root, 2 for a temperament, 3 for
+// a trade, 5 for a mark or a secret, 6 for a title.
+//
+// It is not the pet's level. A trade is worn at level 3 and still worn at 4,
+// and the pet's level is XP while the tier is shape. An unknown name - a
+// hand-edited pet.json, a form renamed in some future atlas - is 0, which is
+// below everything and therefore holds nothing back.
+func Tier(form string) int {
+	if form == "" {
+		return 0
+	}
+	if form == Root {
+		return 1
+	}
+	if titleForms[form] {
+		return 6
+	}
+	if _, mark := Unlocks[form]; mark {
+		return 5
+	}
+	for _, secret := range Secrets {
+		if form == secret {
+			return 5
+		}
+	}
+	depth := 0
+	for f, ok := Parent[form]; ok; f, ok = Parent[f] {
+		depth++
+	}
+	if depth == 0 {
+		return 0
+	}
+	return depth + 1
+}
+
+// floor holds the shape at the highest rung it has ever stood on.
+//
+// The walk is recomputed from the counters on every refresh and two of the
+// habits - the clean test streak and the clean diff streak - go back to zero
+// when the context blows. Without a floor that turned into a fall down the
+// TREE: a level 6 `wasp` came back as a `bughunter`, a level 3 shape, still
+// labelled level 6 because the level is XP and XP does not fall.
+//
+// The rule is that a form only ever moves sideways or up. An `exterminator`
+// who loses the streak can become a `bloodhound` - the same rung, the other
+// habit, which is a real change and says something true about the week - but
+// it cannot go back to being a plain `bughunter`. What was earned at a rung
+// stays at that rung.
+//
+// seen is State.FormSeen, and it is only ever written by RememberForm, which
+// is the same split speech.go uses: work it out here, write it down there,
+// when it has actually reached the screen.
+func floor(here, seen string) string {
+	if Tier(seen) > Tier(here) {
+		return seen
+	}
+	return here
+}
+
+// RememberForm records the rung a form has reached, so a later fall in the
+// counters cannot take the shape back down the tree with it. Callers that
+// persist the state call it; callers that only ask what the pet looks like -
+// the panel's what-if ghost, for one - must not.
+func RememberForm(s *State, form string) {
+	if Tier(form) >= Tier(s.FormSeen) {
+		s.FormSeen = form
+	}
 }
 
 // topBranch picks between siblings: the highest counter wins, and a tie falls
@@ -211,6 +423,39 @@ func topBranch(s *State, candidates []string) string {
 // secret is won and the XP is what is still missing. Handing it over on the
 // spot skipped level 4 whole and put a level 5 next to 412 XP.
 func CurrentForm(s *State) (string, int) {
+	here, level := walk(s)
+	// A shape never goes back down the tree, however far a streak falls. See
+	// floor.
+	// The level is NOT raised to meet the rung, and that is deliberate.
+	//
+	// Since the floor, the two measure different things and can pull apart: the
+	// shape is a high-water mark and the level is current XP, which falls -
+	// `overflow` costs 15 of it and starving costs more. So a pet sitting on
+	// 1900 that blows the context reads "avispa nivel 5", a title beside a
+	// level that could not have earned one.
+	//
+	// Clamping the level up to Tier(form) would tidy that away, and it would
+	// also cancel a penalty the design means: TestStarvingCanCostALevelButNever
+	// Kills says out loud that going hungry costs levels. A shape you earned
+	// and a level you are currently at are two different facts, and the card
+	// shows both.
+	return floor(here, s.FormSeen), level
+}
+
+// walk is CurrentForm without the floor: the shape the counters say RIGHT NOW,
+// with no memory of where the pet has already been.
+//
+// The two are separate because they answer different questions and only one of
+// them is about the screen. CurrentForm is what the pet looks like, and a look
+// does not go backwards. walk is which branch the pet is on today, which is
+// what CheckSecrets needs: it asks whether the pet is a `feral` or a
+// `marathon` - two rung 3 shapes - and the floor can lift a shape above rung 3.
+//
+// That coupling was harmless by coincidence: every mark under those two rides a
+// counter that only grows, so the floor had nothing to lift. Coincidence is not
+// a reason, and the alternative was a test standing guard over a line nobody
+// would think to connect. Asking the right question costs nothing.
+func walk(s *State) (string, int) {
 	level := LevelFor(s.XP)
 	if level >= 5 && s.Secret != "" {
 		if _, ok := Sprites[string(s.Secret)]; ok {
@@ -225,11 +470,17 @@ func CurrentForm(s *State) (string, int) {
 		here = topBranch(s, Tree[here])
 	}
 	if level >= 5 {
-		for _, kid := range Tree[here] {
-			u := Unlocks[kid]
-			if s.Counters[u.Counter] >= u.Threshold {
-				here = kid
-				break
+		if kid, ok := ripestMark(s, Tree[here], true); ok {
+			here = kid
+		}
+	}
+	// Level 6 is the title, and it only exists for a pet that actually wears
+	// the mark: the two are the same habit, the title asking three times as
+	// much of it, so you cannot skip the mark on the way past.
+	if level >= 6 {
+		if title, ok := Titles[here]; ok {
+			if u, ok := TitleUnlock(here); ok && s.Counters[u.Counter] >= u.Threshold {
+				here = title
 			}
 		}
 	}
@@ -247,3 +498,12 @@ func Lineage(form string) []string {
 		path = append([]string{parent}, path...)
 	}
 }
+
+// titleForms is Titles inverted: the fourteen forms with nothing beyond them.
+var titleForms = func() map[string]bool {
+	out := map[string]bool{}
+	for _, title := range Titles {
+		out[title] = true
+	}
+	return out
+}()

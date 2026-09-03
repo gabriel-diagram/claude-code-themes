@@ -13,6 +13,12 @@ package pet
 
 // Names is the 27 forms plus the three temperaments the lineage starts from.
 var Names = map[string]string{
+	// the fourteen titles, level 6 - "la forma final de cada rama"
+	"scalpel": "bisturí", "loom": "telar", "abbot": "abad", "forest": "bosque",
+	"wolf": "lobo", "wasp": "avispa", "atlas": "atlas", "sphinx": "esfinge",
+	"storm": "tormenta", "falcon": "halcón", "mammoth": "mamut", "worm": "gusano",
+	"devil": "diablo", "leviathan": "leviatán",
+
 	// the larva
 	"spark": "chispa",
 

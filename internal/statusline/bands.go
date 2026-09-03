@@ -4,17 +4,19 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 
+	"github.com/gabriel-diagram/claude-code-themes/internal/pet"
 	"github.com/gabriel-diagram/claude-code-themes/internal/theme"
 )
 
 // The four bands.
 //
-//	1 ENGINE  model, context, reasoning, cache   -> what changes every turn
-//	2 WORK    repo, branch, diff, cost           -> what ends up in a commit
-//	3 QUOTA   directory, 5h/7d limits, time      -> read out of the corner of
-//	                                                the eye, so it goes grey
-//	4 PET     trade, level, bar, state, bubble   -> see petBand, below
+//	1 ENGINE  model, context, limits, rate       -> what changes every turn
+//	2 WORK    repo, branch, diff, cost, clock    -> what the session has spent
+//	3 WHERE   the directory, the output style    -> read out of the corner of
+//	                                                the eye: what barely moves
+//	4 PET     trade, level, state, mark, bubble  -> see petBand, below
 
 // sixSigFigs renders a float the way "%g" does: six significant digits, no
 // trailing zeros.
@@ -52,22 +54,58 @@ func formatDuration(ms *float64) string {
 // second, so it has to be the same number.
 func round(f float64) int { return int(math.RoundToEven(f)) }
 
-func engine(p *Payload, tps *float64) []segment {
-	pill := theme.Bgc(theme.Ident) + theme.Black + theme.Bold
+// engine is band 1. accent is the creature's own body colour, or nil when the
+// pet is switched off.
+//
+// The pill and the context bar are painted with it, which is the whole trick:
+// the top-left of the statusline and the creature on the right are one reading
+// in one colour, not two colour schemes describing the same session. The pill
+// used to be a fixed green - the identifier green, borrowed for want of
+// anything better - and the bar carried the state ladder, so a turquoise pet
+// sat next to a green pill and an indigo bar and the eye had three things to
+// reconcile. Now the hue says WHICH creature and the step says HOW it is, and
+// both ends of the line say it together.
+func engine(p *Payload, tps *float64, accent *theme.Colour) []segment {
+	skin := theme.Ident
+	if accent != nil {
+		skin = *accent
+	}
+	pill := theme.Bgc(skin) + theme.On(skin) + theme.Bold
 	out := []segment{
 		seg(0, pill+" "+p.Model+" "+theme.Reset).truncatable(pill, " "+p.Model+" "),
 	}
 
 	if p.ContextPc != nil {
-		level := theme.Ident
-		switch {
-		case *p.ContextPc >= 85:
-			level = theme.Bad
-		case *p.ContextPc >= 60:
-			level = theme.Number
+		// The bar is coloured off the SAME ladder the pet is: pet.Vitals, the
+		// first version's comfort curve. It used to run its own three-step
+		// scale - green under 60, amber under 85, red above - on its own
+		// palette, so the same footer painted the same session in two colours
+		// that agreed about nothing. At ctx 100 with the quotas low the bar
+		// went red while the pet sat there in "a gusto" turquoise.
+		//
+		// It takes its colour from the NECK, which is what the pet reads, so the
+		// two can never disagree. Colouring it off the context alone was tried
+		// and it was still wrong: with the context at 22 and the 5h quota at 46
+		// the bar came out green "fresca" beside a turquoise "a gusto" pet, and
+		// a difference nobody asked for reads as a bug, not as a reading.
+		//
+		// So the bar says two things at once, on purpose: its LENGTH and its
+		// number are the context - the thing you can actually manage - and its
+		// COLOUR is how the session as a whole feels, which is the pet's.
+		//
+		// "The pet's" is now literal. It took the state ladder's colour, which
+		// AGREED with the creature about how the session felt but not about
+		// what was doing the feeling: the ladder is one scale for every pet,
+		// and since the atlas the creature's hue belongs to its branch. A blue
+		// cazabugs sat beside a green bar that meant the same thing. Same
+		// number, same rung, same colour now.
+		vital := pet.StateFor(pet.Bottleneck(p.ContextPc, p.FiveHour, p.SevenDay))
+		fill := vital.Colour
+		if accent != nil {
+			fill = *accent
 		}
 		out = append(out, seg(1,
-			theme.Bar(*p.ContextPc, 100, 16, level, theme.CtxEmpty)+" "+
+			theme.Bar(*p.ContextPc, 100, 16, fill, theme.Empty)+" "+
 				theme.Fg(theme.Emph)+theme.Bold+strconv.Itoa(round(*p.ContextPc))+"%"+theme.Reset,
 		).withSep(" "))
 	}
@@ -83,19 +121,47 @@ func engine(p *Payload, tps *float64) []segment {
 			truncatable(theme.Fg(theme.Mode), p.Effort))
 	}
 
+	// The two rate limits, as bare numbers - no bars. They used to have their
+	// own bars down in band 3, and when band 3 became just the folder they had
+	// nowhere to live: the pet reads them (the usage is the tightest of the
+	// three necks) so a squeezed quota could sink it with nothing on screen
+	// saying why.
+	//
+	// The number is painted off the SAME ladder as the bar and the pet, so a 5h
+	// at 95 shows up in the pet's own indigo. That is the whole answer to "why
+	// is it drowning with the window empty".
+	first := true
+	for _, limit := range []struct {
+		value *float64
+		tag   string
+	}{{p.FiveHour, "5h"}, {p.SevenDay, "7d"}} {
+		if limit.value == nil {
+			continue
+		}
+		text := strconv.Itoa(round(*limit.value)) + "%"
+		s := seg(4, theme.Fg(theme.Dim)+limit.tag+" "+theme.Reset+
+			theme.Fg(pet.StateFor(*limit.value).Colour)+text+theme.Reset)
+		// The 7d hugs the 5h: the two read as one block, as they always did.
+		if !first {
+			s = s.withSep("  ")
+		}
+		out = append(out, s)
+		first = false
+	}
+
 	switch {
 	case tps != nil:
 		text := strconv.FormatFloat(*tps, 'f', 1, 64)
 		if *tps >= 100 {
 			text = strconv.Itoa(round(*tps))
 		}
-		out = append(out, seg(4, theme.Fg(theme.Number)+text+theme.Reset+
+		out = append(out, seg(5, theme.Fg(theme.Number)+text+theme.Reset+
 			theme.Fg(theme.Dim)+" tok/s"+theme.Reset))
 	case p.CacheHit != nil:
 		// It relieves the rate, it does not sit next to it: the design gives
 		// the band one speed slot, and while the model is talking tok/s owns it.
 		text := strconv.Itoa(round(*p.CacheHit*100)) + "%"
-		out = append(out, seg(5, theme.Fg(theme.Number)+text+theme.Reset+
+		out = append(out, seg(6, theme.Fg(theme.Number)+text+theme.Reset+
 			theme.Fg(theme.Dim)+" cache"+theme.Reset))
 	}
 
@@ -121,7 +187,7 @@ func engine(p *Payload, tps *float64) []segment {
 		if p.Vim == "INSERT" {
 			paint = theme.Fg(theme.Mode) + theme.Bold
 		}
-		out = append(out, seg(6, paint+p.Vim+theme.Reset).truncatable(paint, p.Vim))
+		out = append(out, seg(7, paint+p.Vim+theme.Reset).truncatable(paint, p.Vim))
 	}
 	return out
 }
@@ -162,6 +228,14 @@ func work(p *Payload) []segment {
 		out = append(out, seg(3, theme.Fg(theme.Number)+text+theme.Reset).
 			truncatable(theme.Fg(theme.Number), text))
 	}
+
+	// The session clock, come up from band 3. It belongs next to the cost:
+	// both are what the session has SPENT, one in money and one in hours, and
+	// they are the two you read together at the end of a long one.
+	if text := formatDuration(p.Duration); text != "" {
+		out = append(out, seg(4, theme.Fg(theme.Dim)+text+theme.Reset).
+			truncatable(theme.Fg(theme.Dim), text))
+	}
 	return out
 }
 
@@ -193,21 +267,33 @@ func petBand(c Card, columns int) []segment {
 			theme.Fg(theme.Emph)+strconv.Itoa(c.Level)+theme.Reset).
 		truncatable(theme.Fg(theme.Dim), level).withSep(" "))
 
-	// One bar, two currencies. XP is green like every other count that goes
-	// up; a habit is amber and says out loud which mark it is filling, so the
-	// two are never read as the same number.
-	if c.Span > 0 {
-		if c.Mark == "" {
-			out = append(out, seg(3,
-				theme.Bar(float64(c.Done), float64(c.Span), xpBarWidth,
-					theme.Ident, theme.CtxEmpty)).withSep(" "))
-		} else {
-			bar := theme.Bar(float64(c.Done), float64(c.Span), xpBarWidth,
-				theme.Number, theme.CtxEmpty)
-			out = append(out, seg(3, bar+" "+
-				theme.Fg(theme.Number)+c.Mark+theme.Reset).
-				truncatable(theme.Fg(theme.Number), c.Mark).withSep(" "))
+	// How it feels, in words, beside how far it has come. It used to crown the
+	// card, which cost the creature the row its crest needed; here it costs a
+	// few columns of a line that had them, and it sits next to the level, which
+	// is the other thing you read about the pet in one glance.
+	if c.State != "" {
+		paint := theme.Fg(c.Vital.Colour)
+		if c.Jumped {
+			paint += theme.Bold
 		}
+		out = append(out, seg(4, paint+c.State+theme.Reset).
+			truncatable(paint, c.State))
+	}
+
+	// The mark being filled, by name. There used to be a twelve-cell bar in
+	// front of it - XP in green while a level was still opening, the habit in
+	// amber once one was not - and it is gone by request: band 1 already
+	// carries a bar, and a second one beside the state read as the same
+	// measurement twice. The name survives because it says something the bar
+	// could not, which is WHICH mark is being filled; while it is XP that is
+	// still opening, there is no name and nothing here at all.
+	//
+	// Card.Done and Card.Span are still filled in - `pet` shows the numbers,
+	// and the panel draws its own bar from them.
+	if c.Span > 0 && c.Mark != "" {
+		out = append(out, seg(3,
+			theme.Fg(theme.Number)+c.Mark+theme.Reset).
+			truncatable(theme.Fg(theme.Number), c.Mark).withSep(" "))
 	}
 
 	if c.Bubble != "" {
@@ -220,13 +306,37 @@ func petBand(c Card, columns int) []segment {
 }
 
 // BypassMark stands in for the word "bypass", which the CLI already spells out
-// on its own line. Width() counts runes, not columns, so a glyph the terminal
-// draws double would slide the card out of true - keep this one cell wide.
+// on its own line. It is two cells wide, not one, and that is now measured
+// rather than assumed: theme.Width counts cells, so a wide glyph here costs the
+// band the two columns it actually takes instead of sliding the card out of
+// true. See internal/theme/width.go.
 const BypassMark = "⚡"
 
-// xpBarWidth is the twelve cells the canvas draws in band 4.
-const xpBarWidth = 12
-
+// quota is band 3: where you are, and under what character.
+//
+// The 5h and 7d bars and the session clock used to live here too. They went up
+// to bands 1 and 2, which is where they belong, and left the band with the
+// folder alone - and the folder hides at the root of a repo, so the row was
+// blank most of the time. An empty left half is what blankAnchor is for, but an
+// anchor is a fix for a row with nothing in it, not a reason to keep it empty.
+//
+// The OUTPUT STYLE is what moved in. It earns the room band 1 could not spare:
+// it is the slowest-moving thing on the footer - it changes when you change it
+// and not once a turn - and it is the one field that says which CHARACTER is
+// answering, which the rest of the statusline has no way to tell you. Band 1
+// carries what changes every turn and band 2 what the session has spent; this
+// is the band you read out of the corner of your eye, and a name that only
+// moves when you move it belongs exactly there.
+//
+// Both elements are bare names with no label, and the colour does the telling
+// them apart: the folder in grey, because it is somewhere, and the style in
+// Mode purple, the same as `xhigh` and `plan`, because it is a CLI setting.
+// Reading order is where-then-who, and when the band runs short the style goes
+// first: the folder is what this band was for.
+//
+// The band can still come out empty - at the root of a repo with no style set,
+// which is most sessions - and that is not a regression, it is the same rule
+// both elements follow. Nothing here shows unless it says something.
 func quota(p *Payload) []segment {
 	var out []segment
 	// If the folder is named like the repo you are at its root, and then it
@@ -236,28 +346,24 @@ func quota(p *Payload) []segment {
 			truncatable(theme.Fg(theme.Dir), p.Dirname))
 	}
 
-	first := true
-	for _, limit := range []struct {
-		value *float64
-		tag   string
-	}{{p.FiveHour, "5h"}, {p.SevenDay, "7d"}} {
-		if limit.value == nil {
-			continue
-		}
-		s := seg(2, theme.Fg(theme.Dim)+limit.tag+" "+theme.Reset+
-			theme.Bar(*limit.value, 100, 10, theme.Quota, theme.Empty)+
-			theme.Fg(theme.Dim)+" "+strconv.Itoa(round(*limit.value))+"%"+theme.Reset)
-		// The first bar sits behind the separator; the 7d one hugs the 5h one.
-		if !first {
-			s = s.withSep("  ")
-		}
-		out = append(out, s)
-		first = false
-	}
-
-	if text := formatDuration(p.Duration); text != "" {
-		out = append(out, seg(3, theme.Fg(theme.Dim)+text+theme.Reset).
-			truncatable(theme.Fg(theme.Dim), text))
+	// Payload.Style is already "" for the default, so there is no name here
+	// that is not worth the columns. See outputStyle in payload.go.
+	//
+	// It is LOWERCASED, and that is the footer's voice rather than a fact about
+	// the style: everything else in this seat arrives lowercase already -
+	// `xhigh`, `plan`, `auto-edit`, the pet's `cazabugs` and `vibrante` - so a
+	// capitalised name is the one word on the line that shouts. Doing it here
+	// and not in Parse keeps Payload.Style the real name, and doing it in the
+	// band rather than renaming the style covers the two built-ins as well:
+	// `Explanatory` and `Learning` ship capitalised and nobody can rename those.
+	//
+	// The folder next to it is NOT lowercased, and the difference is the point:
+	// a folder is a name on disk that has to match what `ls` says, while a style
+	// name is a setting's label, and labels here are lowercase.
+	if p.Style != "" {
+		style := strings.ToLower(p.Style)
+		out = append(out, seg(2, theme.Fg(theme.Mode)+style+theme.Reset).
+			truncatable(theme.Fg(theme.Mode), style))
 	}
 	return out
 }
