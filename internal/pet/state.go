@@ -65,11 +65,13 @@ type State struct {
 	LevelSeen  int               `json:"level_seen"`
 	HungerPeak int               `json:"hunger_peak"`
 	FedAt      int64             `json:"fed_at"`
+	AteAt      int64             `json:"ate_at"`
 	LastDay    string            `json:"last_day"`
 	RepoDay    string            `json:"repo_day"`
 	LogDay     string            `json:"log_day"`
 	Secret     Secret            `json:"secret"`
 	Counters   map[string]int    `json:"counters"`
+	Meals      map[string]int64  `json:"meals"`
 	Log        []LogEntry        `json:"log"`
 	DayMarks   map[string]string `json:"day_marks"`
 
@@ -82,7 +84,8 @@ type State struct {
 // New is a newborn pet.
 func New() *State {
 	return &State{Counters: map[string]int{}, Log: []LogEntry{},
-		DayMarks: map[string]string{}, Said: []string{}}
+		DayMarks: map[string]string{}, Said: []string{},
+		Meals: map[string]int64{}}
 }
 
 // --- v1 (Spanish) -> v2 (English). Read once, written back translated. ------
@@ -189,6 +192,14 @@ func Load(path string) *State {
 	// fed_today (a daily counter) is gone: /feed is a cooldown now, and an old
 	// key just falls through here unread.
 	s.FedAt = int64(asInt(flat["fed_at"]))
+	// LastFed is the HUNGER CLOCK - DecayHunger walks it forward hour by hour -
+	// so it cannot answer "when did it last eat": a pet abandoned for two days
+	// read as "comió hace 0m". AteAt only moves when something is actually
+	// eaten. An older file has no ate_at and falls back to last_fed.
+	s.AteAt = int64(asInt(flat["ate_at"]))
+	if s.AteAt == 0 {
+		s.AteAt = int64(asInt(flat["last_fed"]))
+	}
 	s.SaidAt = int64(asInt(flat["said_at"]))
 	s.LastDay = asString(flat["last_day"])
 	s.RepoDay = asString(flat["repo_day"])
@@ -221,6 +232,18 @@ func Load(path string) *State {
 				s.DayMarks[k] = day
 			}
 		}
+	}
+
+	// One clock per food. FedAt was the only one there was, which was fine
+	// while /feed was the only food on a cooldown; a second one would have
+	// shared the timestamp and the two would have gagged each other.
+	if meals, ok := flat["meals"].(map[string]any); ok {
+		for name, v := range meals {
+			s.Meals[name] = int64(asInt(v))
+		}
+	}
+	if s.Meals["feed"] == 0 && s.FedAt != 0 {
+		s.Meals["feed"] = s.FedAt
 	}
 
 	if said, ok := flat["said"].([]any); ok {
@@ -275,6 +298,9 @@ func Save(s *State, path string) bool {
 	}
 	if s.Said == nil {
 		s.Said = []string{}
+	}
+	if s.Meals == nil {
+		s.Meals = map[string]int64{}
 	}
 	dir := filepath.Dir(path)
 	if os.MkdirAll(dir, 0o755) != nil {

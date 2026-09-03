@@ -36,7 +36,12 @@ const planMinTasks = 3
 
 // hookState is the per-session scratch this package owns.
 type hookState struct {
-	Code        int `json:"code"`
+	Code int `json:"code"`
+	// Edited is "something changed since the last green suite was paid for".
+	// A suite that passes without a single edit behind it is not work, it is
+	// the same suite again - and this package would rather miss a meal than
+	// invent one.
+	Edited      int `json:"edited"`
 	PlanCounted int `json:"plan_counted"`
 	Done        int `json:"done"`
 	Red         int `json:"red"`
@@ -175,6 +180,7 @@ func Run(stdin io.Reader, statePath string, now time.Time) int {
 	case editTools[tool]:
 		// Touching code closes the door to the oracle.
 		h.Code = 1
+		h.Edited = 1
 	case tool == "TodoWrite":
 		handleTodos(payload, &h, toolsPath, statePath, now)
 	case tool == "Bash":
@@ -300,6 +306,13 @@ func handleBash(payload map[string]any, h *hookState, statePath string, now time
 		h.Red = 0
 		s.Bump("repro_before_fix", 1)
 	}
+	// The red -> green cycle above is credited either way: reproducing a bug
+	// is worth recording even when the suite itself does not pay out.
+	if h.Edited == 0 {
+		pet.Save(s, statePath)
+		return
+	}
+	h.Edited = 0
 	pet.DecayHunger(s, now)
 	pet.Feed(s, "tests", "", now)
 	pet.Save(s, statePath)

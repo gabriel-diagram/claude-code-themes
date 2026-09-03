@@ -10,10 +10,35 @@ const (
 	HungerWarn = 7
 )
 
+// StarveXP is what an hour at full hunger costs. Hunger used to stop at the
+// cap and sit there for free, which is why a pet could be left for a week and
+// come back exactly as strong: the only thing that ever took XP away was
+// blowing the context, at -15 a time.
+const StarveXP = 1
+
+// XPCeiling is as far as the XP goes: the last threshold plus one level-1
+// stretch of headroom. Without a ceiling the XP is a moat - at 1641 with the
+// top at 900 it took FIFTY blown contexts to drop a level, so every penalty we
+// could add would be swallowed by the buffer before it meant anything.
+var XPCeiling = Levels[len(Levels)-1].XP + Levels[1].XP
+
 // FeedCooldown is how long /feed makes you wait. The design canvas calls it
 // "un tiro al plato · una vez cada cuatro horas": a cooldown, not a daily
 // counter, which is the same clock hunger already runs on.
 const FeedCooldown = 4 * time.Hour
+
+// TestsCooldown is how often a green suite counts.
+//
+// It is the biggest meal on the table and it had no brake at all, which made
+// it the one thing worth farming: running the suite in a loop fed the pet
+// +15 every few seconds - 120 XP in eight minutes, measured - so the ceiling
+// and the starvation drain were decoration. Nothing that takes nine seconds
+// to repeat can be worth a fifteenth of a level.
+//
+// An hour is not arbitrary: the canvas budgets level 5 at "una semana de uso
+// normal", which is about 128 XP a day, and eight green suites in a working
+// day is exactly that.
+const TestsCooldown = time.Hour
 
 // Food is one meal's effect. A Cooldown of 0 means you can eat it whenever the
 // thing that earns it happens.
@@ -27,7 +52,7 @@ type Food struct {
 
 // Foods, by event name.
 var Foods = map[string]Food{
-	"tests":    {15, -4, 0, "tests en verde", []string{"inquisitive", "tests", "test_streak"}},
+	"tests":    {15, -4, TestsCooldown, "tests en verde", []string{"inquisitive", "tests", "test_streak"}},
 	"commit":   {12, -3, 0, "commit", []string{"methodical", "diffs", "diff_streak"}},
 	"compact":  {8, -3, 0, "compact", []string{"methodical"}},
 	"task":     {6, -1, 0, "tarea del plan", []string{"inquisitive", "plans"}},
@@ -52,8 +77,13 @@ func DecayHunger(s *State, now time.Time) {
 	}
 	if hours := (now.Unix() - s.LastFed) / 3600; hours > 0 {
 		s.Hunger += int(hours)
-		if s.Hunger > HungerMax {
+		// The overflow past the cap IS the count of hours spent starving, so
+		// no second timestamp is needed to bill them.
+		if starved := s.Hunger - HungerMax; starved > 0 {
 			s.Hunger = HungerMax
+			if s.XP -= starved * StarveXP; s.XP < 0 {
+				s.XP = 0
+			}
 		}
 		s.LastFed += hours * 3600
 	}
@@ -80,12 +110,15 @@ func Feed(s *State, event, note string, now time.Time) bool {
 	// The cooldown keeps its own timestamp: the log is capped at LogMax entries
 	// and cleared daily, so reading the last meal out of it would forget a
 	// feed at 23:00 the moment midnight passed.
-	if food.Cooldown > 0 && waited(s, now) < food.Cooldown {
+	if food.Cooldown > 0 && waited(s, event, now) < food.Cooldown {
 		return false
 	}
 
 	if s.XP += food.XP; s.XP < 0 {
 		s.XP = 0
+	}
+	if s.XP > XPCeiling {
+		s.XP = XPCeiling
 	}
 	if food.Hunger != 0 {
 		s.Hunger += food.Hunger
@@ -98,9 +131,18 @@ func Feed(s *State, event, note string, now time.Time) bool {
 	}
 	if food.XP > 0 {
 		s.LastFed = now.Unix()
+		s.AteAt = now.Unix()
 	}
 	if food.Cooldown > 0 {
-		s.FedAt = now.Unix()
+		if s.Meals == nil {
+			s.Meals = map[string]int64{}
+		}
+		s.Meals[event] = now.Unix()
+		// FedAt is kept in step so an older build, which knows only this one
+		// clock, still honours the /feed cooldown.
+		if event == "feed" {
+			s.FedAt = now.Unix()
+		}
 	}
 
 	if s.LastDay != day {
@@ -148,11 +190,15 @@ func truncate(s string, n int) string {
 // clock put forward once, a hand-edited pet.json - would otherwise read as a
 // negative wait and lock /feed until the clock caught up, which the daily
 // counter this replaces could never do because midnight always came.
-func waited(s *State, now time.Time) time.Duration {
-	if s.FedAt == 0 {
+func waited(s *State, event string, now time.Time) time.Duration {
+	at := s.Meals[event]
+	if at == 0 && event == "feed" {
+		at = s.FedAt
+	}
+	if at == 0 {
 		return 1<<62 - 1
 	}
-	since := now.Sub(time.Unix(s.FedAt, 0))
+	since := now.Sub(time.Unix(at, 0))
 	if since < 0 {
 		return 1<<62 - 1
 	}
@@ -165,7 +211,7 @@ func Waiting(s *State, event string, now time.Time) time.Duration {
 	if !ok || food.Cooldown == 0 {
 		return 0
 	}
-	left := food.Cooldown - waited(s, now)
+	left := food.Cooldown - waited(s, event, now)
 	if left < 0 {
 		return 0
 	}

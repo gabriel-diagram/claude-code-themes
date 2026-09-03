@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -458,14 +459,17 @@ func TestHungerDoesNotMoveForAPetThatNeverAte(t *testing.T) {
 
 func TestAnOverflowBreaksTheCleanStreaks(t *testing.T) {
 	s := New()
+	// A green suite only counts once an hour now, so the streak has to be
+	// built at the pace a person actually works at.
 	for i := 0; i < 5; i++ {
-		Feed(s, "tests", "", t0.Add(time.Duration(i)*time.Minute))
-		Feed(s, "commit", "", t0.Add(time.Duration(i)*time.Minute+time.Second))
+		at := t0.Add(time.Duration(i) * 90 * time.Minute)
+		Feed(s, "tests", "", at)
+		Feed(s, "commit", "", at.Add(time.Second))
 	}
 	if s.Counters["test_streak"] != 5 {
 		t.Fatalf("test_streak = %d", s.Counters["test_streak"])
 	}
-	Feed(s, "overflow", "", t0.Add(time.Hour))
+	Feed(s, "overflow", "", t0.Add(9*time.Hour))
 	if s.Counters["test_streak"] != 0 || s.Counters["diff_streak"] != 0 {
 		t.Error("the streaks survived the blowout")
 	}
@@ -486,7 +490,7 @@ func TestThePhoenixNeedsTheFullHungerRoundTrip(t *testing.T) {
 		t.Fatalf("hunger = %d", s.Hunger)
 	}
 	for i := 0; i < 5; i++ {
-		Feed(s, "tests", "", t0.Add(12*time.Hour+time.Duration(i)*time.Minute))
+		Feed(s, "tests", "", t0.Add(12*time.Hour+time.Duration(i)*90*time.Minute))
 	}
 	if s.Hunger != 0 || s.Secret != "phoenix" {
 		t.Errorf("hunger=%d secret=%q", s.Hunger, s.Secret)
@@ -1027,5 +1031,210 @@ func TestTheCooldownStillBindsAfterTheFix(t *testing.T) {
 	}
 	if !Feed(s, "feed", "", now.Add(4*time.Hour+time.Second)) {
 		t.Error("it refused after the four hours were up")
+	}
+}
+
+func TestTheXPHasACeiling(t *testing.T) {
+	// Without one the XP is a moat: every penalty drowns in the buffer.
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	s := New()
+	s.XP = XPCeiling - 5
+	Feed(s, "tests", "", now) // +15, would land at XPCeiling+10
+	if s.XP != XPCeiling {
+		t.Errorf("xp went to %d, want it capped at %d", s.XP, XPCeiling)
+	}
+	if LevelFor(s.XP) != 5 {
+		t.Errorf("the ceiling dropped the pet to level %d, want it at the top",
+			LevelFor(s.XP))
+	}
+}
+
+func TestTheCeilingLeavesRoomToFallButNotToHide(t *testing.T) {
+	top := Levels[len(Levels)-1].XP
+	if XPCeiling <= top {
+		t.Fatalf("ceiling %d is not above the last threshold %d", XPCeiling, top)
+	}
+	// The buffer has to be crossable: a couple of days of neglect, not fifty
+	// blown contexts.
+	if hours := (XPCeiling - top) / StarveXP; hours > 72 {
+		t.Errorf("%d hours of starving to drop a level, too long to ever bite", hours)
+	}
+}
+
+func TestStarvingDrainsTheXP(t *testing.T) {
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	s := New()
+	s.XP, s.Hunger = 500, 0
+	s.LastFed = now.Unix()
+
+	// Ten hours to reach the cap: hunger only, nothing billed yet.
+	DecayHunger(s, now.Add(10*time.Hour))
+	if s.Hunger != HungerMax {
+		t.Fatalf("hunger is %d after ten hours, want the cap", s.Hunger)
+	}
+	if s.XP != 500 {
+		t.Errorf("xp moved to %d before the cap was reached", s.XP)
+	}
+
+	// Six more hours, all of them at full hunger.
+	DecayHunger(s, now.Add(16*time.Hour))
+	if want := 500 - 6*StarveXP; s.XP != want {
+		t.Errorf("xp is %d after six starving hours, want %d", s.XP, want)
+	}
+	if s.Hunger != HungerMax {
+		t.Errorf("hunger climbed past its cap to %d", s.Hunger)
+	}
+}
+
+func TestStarvingCanCostALevelButNeverKills(t *testing.T) {
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	s := New()
+	s.XP, s.Hunger = Levels[len(Levels)-1].XP, HungerMax // level 5, at the line
+	s.LastFed = now.Unix()
+
+	DecayHunger(s, now.Add(2*time.Hour))
+	if LevelFor(s.XP) != 4 {
+		t.Errorf("two hours of starving at the line left it at level %d, want 4",
+			LevelFor(s.XP))
+	}
+
+	// Left alone long enough it bottoms out at the larva - at StarveXP an hour
+	// that is about six weeks from the top - and stays there. Never dies.
+	DecayHunger(s, now.Add(50*24*time.Hour))
+	if s.XP != 0 {
+		t.Errorf("fifty days of neglect left %d xp, want it bottomed out", s.XP)
+	}
+	if form, level := CurrentForm(s); form != Root || level != 1 {
+		t.Errorf("bottomed out as %s/%d, want the larva at level 1", form, level)
+	}
+}
+
+func TestAPetThatNeverAteDoesNotStarve(t *testing.T) {
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	s := New()
+	s.XP = 30
+	DecayHunger(s, now.Add(400*time.Hour))
+	if s.XP != 30 {
+		t.Errorf("a newborn that never ate lost xp: %d", s.XP)
+	}
+}
+
+func TestTheCostOfNeglectIsWhatWeMeantItToBe(t *testing.T) {
+	// The balance, written down so a change to StarveXP or the ceiling has to
+	// argue with it rather than drift past it.
+	top := Levels[len(Levels)-1].XP
+
+	toDropFromTheTop := (XPCeiling - top) / StarveXP
+	if toDropFromTheTop < 24 || toDropFromTheTop > 72 {
+		t.Errorf("%dh of neglect to lose level 5; wanted a couple of days, "+
+			"not an afternoon and not a fortnight", toDropFromTheTop)
+	}
+
+	toBottomOut := XPCeiling / StarveXP / 24
+	if toBottomOut < 21 {
+		t.Errorf("%d days to fall from the top to the larva, too fast for a "+
+			"holiday", toBottomOut)
+	}
+
+	// Hunger has to reach its cap before any of this starts, so a normal
+	// night away costs nothing at all.
+	s := New()
+	s.XP, s.LastFed = 500, time.Now().Unix()
+	DecayHunger(s, time.Now().Add(HungerMax*time.Hour))
+	if s.XP != 500 {
+		t.Errorf("a night away already cost %d xp", 500-s.XP)
+	}
+}
+
+func TestAteAtSurvivesTheHungerClock(t *testing.T) {
+	// LastFed is walked forward by DecayHunger, so it answers "how long has
+	// the hunger been running", not "when did it last eat". A pet left for two
+	// days used to report "comió hace 0m".
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	s := New()
+	Feed(s, "tests", "", now)
+	if s.AteAt != now.Unix() {
+		t.Fatalf("eating did not record when: %d", s.AteAt)
+	}
+
+	later := now.Add(40 * time.Hour)
+	DecayHunger(s, later)
+	if s.AteAt != now.Unix() {
+		t.Errorf("the hunger clock moved AteAt to %d", s.AteAt)
+	}
+	if hours := (later.Unix() - s.AteAt) / 3600; hours != 40 {
+		t.Errorf("it reads as %dh since the last meal, want 40", hours)
+	}
+}
+
+func TestAnOlderFileFallsBackToLastFed(t *testing.T) {
+	// ate_at did not exist before the starvation drain; last_fed is the best
+	// answer such a file has.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pet.json")
+	if err := os.WriteFile(path, []byte(
+		`{"xp":100,"hunger":2,"last_fed":1700000000}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if s := Load(path); s.AteAt != 1700000000 {
+		t.Errorf("AteAt is %d, want it to fall back to last_fed", s.AteAt)
+	}
+}
+
+func TestTheBiggestMealHasTheTightestBrake(t *testing.T) {
+	// The table used to be upside down: /feed, worth +3, was the only food on
+	// a cooldown, while a green suite at +15 could be repeated every nine
+	// seconds. Whatever the numbers become, the big meals cannot be the free
+	// ones.
+	free, braked := 0, 0
+	for name, food := range Foods {
+		if food.XP >= 15 && food.Cooldown == 0 {
+			t.Errorf("%q is worth %+d xp and has no brake", name, food.XP)
+		}
+		if food.Cooldown == 0 {
+			free++
+		} else {
+			braked++
+		}
+	}
+	if braked == 0 {
+		t.Error("nothing on the table has a brake")
+	}
+}
+
+func TestEachFoodKeepsItsOwnClock(t *testing.T) {
+	// One shared timestamp meant two braked foods would gag each other.
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	s := New()
+	s.Counters["nothing"] = 0
+
+	if !Feed(s, "tests", "", now) {
+		t.Fatal("the first suite was refused")
+	}
+	if !Feed(s, "feed", "", now) {
+		t.Error("eating a green suite blocked /feed as well")
+	}
+	if Feed(s, "tests", "", now.Add(30*time.Minute)) {
+		t.Error("a second suite got through inside the cooldown")
+	}
+	if !Feed(s, "tests", "", now.Add(TestsCooldown+time.Second)) {
+		t.Error("the suite was still refused after its cooldown")
+	}
+}
+
+func TestAnOldFileKeepsItsFeedCooldown(t *testing.T) {
+	// fed_at was the only clock there was; a file written by an older build
+	// must not come back with /feed already available.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pet.json")
+	now := time.Now()
+	raw := `{"xp":100,"hunger":2,"fed_at":` +
+		strconv.FormatInt(now.Add(-time.Hour).Unix(), 10) + `}`
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := Load(path)
+	if Feed(s, "feed", "", now) {
+		t.Error("an hour after a hand-feed it ate again; the cooldown is four")
 	}
 }

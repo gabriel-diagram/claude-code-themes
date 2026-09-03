@@ -313,6 +313,19 @@ El árbol entero, la tabla de comida y qué alimenta cada contador están en
 [evolution.md](docs/design/evolution.md). Sin `scripts/install.sh --hooks` el bicho existe y
 se ve, pero solo come con `/feed`.
 
+**Y no se farmea.** La suite verde es la comida más grande (+15) y era la única
+sin freno: correrla en bucle daba 120 xp en ocho minutos. Ahora cuenta **una vez
+por hora y solo si has cambiado algo** desde la última —una suite que pasa sin
+una edición detrás no es trabajo, es la misma suite otra vez.
+
+**Y baja.** El hambre sube +1 por hora sin comer; al llegar a 10 deja de ser un
+aviso y empieza a costar **1 xp cada hora**, así que un bicho desatendido se
+desinfla: medio día fuera no se nota, a los **tres días** pierde el nivel 5 y
+hacia las seis semanas vuelve a larva. La xp además tiene techo —un tramo por
+encima del último umbral—, porque sin él el colchón acumulado se traga
+cualquier castigo y el bicho se queda a tope para siempre. Nunca muere: por
+abajo se queda en `chispa`, que es una forma, no una tumba.
+
 ### El uso: media ponderada
 
 Un solo número entre 0 y 100 decide estado, ojos, patas y color:

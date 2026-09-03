@@ -5,7 +5,7 @@ El bicho tiene **dos capas que no se mezclan**:
 | | qué mide | de dónde sale | sube y baja |
 | --- | --- | --- | --- |
 | **vida** | cómo está *ahora* | uso de contexto y cuota | sí, todo el rato |
-| **progreso** | lo que llevas hecho | XP acumulada en `~/.claude/pet.json` | el nivel nunca baja |
+| **progreso** | lo que llevas hecho | XP acumulada en `~/.claude/pet.json` | sube comiendo, baja de hambre |
 
 La **vida** elige los ojos, las patas y el color — está en [vitals.md](vitals.md).
 La **progreso** elige la silueta, que es de lo que va este documento.
@@ -100,20 +100,62 @@ saltaba el nivel 4 entero y ponía un «nivel 5» al lado de 412 XP.
 
 | Comida | XP | Hambre | Tope |
 | --- | --- | --- | --- |
-| tests en verde | **+15** | −4 | — |
+| tests en verde | **+15** | −4 | una cada hora, y con un cambio detrás |
 | commit hecho | **+12** | −3 | — |
 | `/compact` | **+8** | −3 | — |
 | tarea del plan cerrada | **+6** | −1 | — |
 | `/feed` | **+3** | −2 | uno cada 4 h |
 | contexto al 100% | **−15** | — | — |
+| cada hora a hambre 10 | **−1** | — | — |
+
+**Por qué la suite verde tiene freno.** Era la comida más grande de la tabla y
+la única sin ningún tope, así que era lo único que compensaba farmear: correr
+la suite en bucle daba +15 cada pocos segundos —120 XP en ocho minutos, medido
+en una sesión real— y con eso el techo y el drenaje eran decoración. Nada que
+se repita en nueve segundos puede valer un quinceavo de nivel.
+
+Van dos frenos, porque resuelven cosas distintas:
+
+- **Una cada hora.** No es un número al azar: el lienzo presupuesta el nivel 5
+  en «una semana de uso normal», o sea unos 128 XP al día, y ocho suites verdes
+  en una jornada son exactamente eso.
+- **Y con un cambio detrás.** Una suite que pasa sin que hayas editado nada no
+  es trabajo, es la misma suite otra vez. El hook ya sabía qué herramientas se
+  usan, así que le basta con recordar si hubo un `Edit` desde la última vez que
+  cobró. El ciclo rojo → verde del sabueso se apunta igual aunque la suite no
+  pague: reproducir un fallo cuenta por sí solo.
+
+Cada comida lleva **su propio reloj** (`meals` en `pet.json`). Antes había uno
+solo, `fed_at`, que bastaba mientras `/feed` era la única con espera; dos
+comidas con freno se habrían amordazado la una a la otra.
 
 El **hambre** sube +1 por hora sin comer, hasta 10. A partir de 7 los ojos se
-apagan y el bicho pide comida en la statusline. **Nunca muere**: el hambre no
-resta XP ni baja el nivel, solo se le nota en la cara.
+apagan y el bicho pide comida en la statusline. Al llegar a 10 deja de ser un
+aviso y **empieza a costar 1 XP por hora**, que es la única forma que tiene el
+bicho de perder terreno solo. **Nunca muere**: por abajo se queda en larva, que
+es una forma, no una tumba.
 
-Reventar el contexto resta 15 XP y rompe las rachas limpias, pero **el nivel
-nunca baja**. Lo que se pierde es el camino hacia la siguiente evolución, no lo
-andado.
+Reventar el contexto resta 15 XP y rompe las rachas limpias.
+
+### Por qué el nivel sí baja
+
+El diseño original decía que el nivel nunca baja, y con esa regla un bicho que
+llegaba al tope se quedaba ahí para siempre: no había nada que ganar ni nada
+que perder. La escalera terminaba y el tamagotchi dejaba de serlo.
+
+Dos cambios lo corrigen sin tocar el árbol, porque la maquinaria de bajar ya
+estaba entera —`LevelFor` sigue a la XP en las dos direcciones, y con el nivel
+baja la forma—; lo que faltaba era que algo restase de verdad:
+
+- **La XP tiene techo**: `XPCeiling`, el último umbral más un tramo de nivel 1.
+  Sin él la XP era un foso. Con 1641 puntos y el tope en 900 hacían falta
+  cincuenta contextos reventados para bajar un nivel, así que cualquier castigo
+  se ahogaba en el colchón antes de significar nada.
+- **El hambre al tope drena.** Medio día fuera no cuesta nada; a los **tres
+  días** se pierde el nivel 5, y hacia las seis semanas se vuelve a larva.
+
+Las cifras viven en `StarveXP` y `XPCeiling`, y hay un test
+(`TestTheCostOfNeglectIsWhatWeMeantItToBe`) que discute con quien las mueva.
 
 ## Qué alimenta cada contador
 
