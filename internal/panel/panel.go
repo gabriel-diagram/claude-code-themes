@@ -197,32 +197,31 @@ func showPanel(out io.Writer, statePath string, now time.Time) int {
 
 	nl("")
 	nl("  " + theme.Fg(theme.Path) + theme.Bold + "pet" + reset + "  " + dim + "/pet" + reset)
-	nl("")
-	for _, row := range rows {
-		nl("     " + row)
+	// The XP bar stands on its end beside the sprite: it is the one number
+	// that only ever means "how far along", so it reads better as a column
+	// filling up next to the pet than as one more row underneath it.
+	xpDone, xpSpan, climbing := pet.LevelProgress(s.XP)
+	if !climbing {
+		xpDone, xpSpan = 1, 1 // the ladder really is finished
 	}
+	column := theme.VBar(float64(xpDone), float64(xpSpan), len(rows),
+		theme.Ident, theme.CtxEmpty)
+
+	nl("")
+	for i, row := range rows {
+		nl("     " + column[i] + "   " + row)
+	}
+	nl("     " + emph + strconv.Itoa(s.XP) + reset + dim + " xp" + reset)
 	nl("")
 	joiner := " " + theme.Fg(theme.Rule) + "›" + reset + dim + " "
-	head := "  " + theme.Fg(theme.Number) + theme.Bold + pet.Name(form) + reset +
-		"   " + dim + "nivel " + reset + emph + strconv.Itoa(level) + reset
-	// The larva's lineage is the larva: printing "chispa nivel 1 chispa" says
-	// the same word twice. It only earns its place once there is a path.
+	nl("  " + theme.Fg(theme.Number) + theme.Bold + pet.Name(form) + reset +
+		"   " + dim + "nivel " + reset + emph + strconv.Itoa(level) + reset)
+	// The larva's lineage is the larva: printing "chispa" twice says nothing.
+	// It only earns its line once there is a path.
 	if len(trail) > 1 {
-		head += "   " + dim + strings.Join(trail, joiner) + reset
+		nl("  " + dim + strings.Join(trail, joiner) + reset)
 	}
-	nl(head)
 	nl("")
-
-	// The bar is the stretch of THIS level, not the running total: against the
-	// total it would never be empty after a level-up. At the top the ladder is
-	// genuinely finished, so it sits full.
-	xpDone, xpSpan := 1, 1
-	if hasUpcoming {
-		xpDone, xpSpan, _ = pet.LevelProgress(s.XP)
-	}
-	nl("  " + dim + "xp     " + reset +
-		theme.Bar(float64(xpDone), float64(xpSpan), 16, theme.Ident, theme.CtxEmpty) +
-		"  " + emph + strconv.Itoa(s.XP) + reset)
 
 	// Out of levels is not out of tree. The canvas: "las ramificaciones no
 	// dependen de la XP sino del hábito" - so at the top the row that still
@@ -243,9 +242,17 @@ func showPanel(out io.Writer, statePath string, now time.Time) int {
 	case s.Hunger >= 4:
 		tint = theme.Number
 	}
+	// At the cap the hunger stops being a warning and starts costing XP. A
+	// penalty you cannot see is a penalty that just looks like a bug, so the
+	// row says it out loud.
+	starving := ""
+	if s.Hunger >= pet.HungerMax {
+		starving = dim + " · se está comiendo " + reset +
+			theme.Fg(theme.Bad) + strconv.Itoa(pet.StarveXP) + " xp/h" + reset
+	}
 	nl("  " + dim + "hambre " + reset +
 		theme.Bar(float64(s.Hunger), pet.HungerMax, 10, tint, theme.Empty) +
-		"  " + emph + strconv.Itoa(s.Hunger) + reset)
+		"  " + emph + strconv.Itoa(s.Hunger) + reset + starving)
 
 	streak := s.Streak
 	shown := streak
@@ -271,8 +278,8 @@ func showPanel(out io.Writer, statePath string, now time.Time) int {
 		parts = append(parts, emph+strconv.Itoa(upcomingXP-s.XP)+reset+
 			dim+" para "+reset+theme.Fg(theme.Number)+target+reset)
 	}
-	if s.LastFed != 0 {
-		minutes := (now.Unix() - s.LastFed) / 60
+	if s.AteAt != 0 {
+		minutes := (now.Unix() - s.AteAt) / 60
 		when := fmt.Sprintf("hace %dm", minutes)
 		if minutes >= 60 {
 			when = fmt.Sprintf("hace %dh %02dm", minutes/60, minutes%60)
@@ -290,25 +297,48 @@ func showPanel(out io.Writer, statePath string, now time.Time) int {
 		if len(entries) > 8 {
 			entries = entries[len(entries)-8:]
 		}
+		// Both columns are measured against what the day actually holds
+		// instead of a fixed width. Most meals carry no note at all -
+		// a green suite has nothing to say - and a hardcoded %-22s spent
+		// twenty-two columns, painted, on a gap nobody had filled.
+		type row struct {
+			tint        theme.Colour
+			xp          int
+			label, note string
+			at          int64
+		}
+		rows := make([]row, 0, len(entries))
+		labelWidth, noteWidth := 0, 0
 		for _, e := range entries {
-			tint := theme.Ident
+			r := row{tint: theme.Ident, xp: e.XP, at: e.At, label: e.Event}
 			if e.XP <= 0 {
-				tint = theme.Bad
+				r.tint = theme.Bad
 			}
-			label := e.Event
 			if food, ok := pet.Foods[e.Event]; ok {
-				label = food.Label
-			} else if label == "" {
-				label = "?"
+				r.label = food.Label
+			} else if r.label == "" {
+				r.label = "?"
 			}
-			note := e.Note
-			if len([]rune(note)) > 22 {
-				note = string([]rune(note)[:22])
+			r.note = e.Note
+			if len([]rune(r.note)) > 22 {
+				r.note = string([]rune(r.note)[:22])
 			}
-			nl(fmt.Sprintf("    %s%+4d%s  %s%-18s%s %s%-22s%s %s%s%s",
-				theme.Fg(tint), e.XP, reset, emph, label, reset,
-				theme.Fg(theme.Link), note, reset,
-				dim, time.Unix(e.At, 0).Format("15:04"), reset))
+			if n := len([]rune(r.label)); n > labelWidth {
+				labelWidth = n
+			}
+			if n := len([]rune(r.note)); n > noteWidth {
+				noteWidth = n
+			}
+			rows = append(rows, r)
+		}
+		for _, r := range rows {
+			line := fmt.Sprintf("    %s%+4d%s  %s%-*s%s",
+				theme.Fg(r.tint), r.xp, reset, emph, labelWidth, r.label, reset)
+			if noteWidth > 0 {
+				line += fmt.Sprintf(" %s%-*s%s",
+					theme.Fg(theme.Link), noteWidth, r.note, reset)
+			}
+			nl(line + " " + dim + time.Unix(r.at, 0).Format("15:04") + reset)
 		}
 	}
 	nl("")

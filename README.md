@@ -306,6 +306,8 @@ chispa -> pauta / sonda / brasa -> siete oficios -> catorce marcas
 
 ```bash
 /pet     # nivel, evolución, xp, hambre, racha y la comida de hoy
+         # la xp va en vertical junto al bicho: es lo único que solo
+         # significa "cuánto llevas", así que se lee como una columna
 /feed    # +3 xp, hambre −2 (uno cada cuatro horas)
 ```
 

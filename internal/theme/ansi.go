@@ -69,6 +69,41 @@ func TruncateRunes(s string, n int) string {
 }
 
 // Bar draws a width-wide bar. value is clamped into [0, total].
+// VBar is Bar stood on its end: one column, height cells tall, filled from the
+// bottom up. It is drawn in eighths, so five cells carry forty steps rather
+// than five - a plain block bar that short would round 41% down to 40% and
+// then sit still for a whole level.
+//
+// It returns the rows top-first, ready to print beside a sprite.
+func VBar(value, total float64, height int, full, empty Colour) []string {
+	rows := make([]string, height)
+	eighths := []rune("·▁▂▃▄▅▆▇")
+
+	filled := 0
+	if total > 0 && value == value && total == total { // NaN check
+		if value < 0 {
+			value = 0
+		}
+		if value > total {
+			value = total
+		}
+		filled = int(float64(8*height) * value / total)
+	}
+	for i := range rows {
+		// row 0 is the top, so it is the last one to fill
+		cell := filled - (height-1-i)*8
+		switch {
+		case cell >= 8:
+			rows[i] = Fg(full) + "█" + Reset
+		case cell <= 0:
+			rows[i] = Fg(empty) + "·" + Reset
+		default:
+			rows[i] = Fg(full) + string(eighths[cell]) + Reset
+		}
+	}
+	return rows
+}
+
 func Bar(value, total float64, width int, full, empty Colour) string {
 	if total <= 0 || total != total {
 		return Fg(empty) + strings.Repeat("░", width) + Reset
