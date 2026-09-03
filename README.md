@@ -2,8 +2,8 @@
 
 Tres temas de color para la CLI de [Claude Code](https://claude.com/claude-code)
 más una **statusline** de cuatro bandas con un bicho a la derecha que refleja el
-estado real de la sesión — y que **evoluciona** según cómo trabajas: 27 formas
-en un árbol de cinco niveles, con XP, hambre y racha.
+estado real de la sesión — y que **evoluciona** según cómo trabajas: 41 formas
+en un árbol de seis niveles, con XP, hambre y racha.
 
 | Tema | Acento | Look |
 | --- | --- | --- |
@@ -38,7 +38,7 @@ de esa captura es la vieja, de tres bandas.*
 - `scripts/build.sh` — compila las cinco plataformas
 - `scripts/install.sh` — instalación sin plugin; con `--hooks`, también los hooks
 - [`vitals.md`](docs/design/vitals.md) — la capa del momento: qué hace que pase de fresh a k.o.
-- [`evolution.md`](docs/design/evolution.md) — la capa permanente: XP, comida y las 27 formas
+- [`evolution.md`](docs/design/evolution.md) — la capa permanente: XP, comida y las 41 formas
 - [`audit-log.md`](docs/audit-log.md) — rendimiento y errores, medido
 
 ## Instalación
@@ -166,15 +166,20 @@ menor prioridad antes que hacer *wrap* (que descuadra la caja del prompt):
 
 ```
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────
- Opus 5  ██████░░░░░░░░░░ 36% · 1M ctx │ xhigh                                                   vibrante 
-rochas-energy-backend │ +184/−37 │ $28.29                                                         ▗▟┼█┼▙▖ 
-api │ 5h ████░░░░░░ 41%  7d █░░░░░░░░░ 13% │ 1h 12m                                              ▐█ > < █▌
-refactor nivel 4 █████░░░░░░░ │ ◗ cinco días de racha. mañana no me falles.                       ▝▘▜█▛▘▝ 
+ Opus 5  ██████░░░░░░░░░░ 36% · 1M ctx │ xhigh │ 5h 41%  7d 13% │ 64.2 tok/s │ ⚡         vibrante 
+rochas-energy-backend (main ✳) │ +184/−37 │ $28.29 │ 1h 12m                               ▗▟┼█┼▙▖ 
+api                                                                                      ▐█ > < █▌
+refactor nivel 4 █████░░░░░░░ │ ◗ cinco días de racha. mañana no me falles.                ▝▘▜█▛▘▝ 
 ```
 
-- **Banda 1 · motor** — modelo, contexto, razonamiento y ritmo: lo que cambia
-  cada turno.
-- **Banda 2 · trabajo** — repo, rama, diff y coste: lo que se lleva a un commit.
+- **Banda 1 · motor** — modelo, contexto, **los dos límites**, razonamiento y
+  ritmo: lo que cambia cada turno. Las cuotas van como número pelado, sin barra,
+  y **pintadas con la misma escalera** que la barra de contexto y el bicho: un
+  `5h` al 95% sale en el añil del bicho, que es la respuesta a «¿por qué está
+  ahogado si la ventana está vacía?».
+- **Banda 2 · trabajo** — repo, rama, diff, coste **y el reloj de la sesión**: lo
+  que la sesión lleva gastado, en dinero y en horas. Se leen juntos al final de
+  una larga.
   El nombre del repo lo da `workspace.repo.name` del payload cuando hay remoto,
   y si no, la carpeta raíz del repo. Solo el nombre: el owner es siempre el mismo
   y no te dice dónde estás.
@@ -195,10 +200,44 @@ pero sí en el transcript, cuya ruta sí llega. Se lee solo la cola del fichero
 (0,02 ms) y sale como distintivo en la banda. No es una copia del pie que pinta
 el propio Claude Code: aquello es suyo y no se puede tocar.
 
-- **Banda 3 · cuota** — carpeta, límites 5h/7d y tiempo: se lee de reojo, va en
-  gris. De la ruta sale **solo la carpeta en la que estás**, no el camino entero;
-  y si se llama igual que el repo —- es decir, estás en su raíz—- desaparece,
+- **Banda 3 · dónde y con qué criterio** — la carpeta y el **estilo de salida
+  activo**, que es lo que se lee de reojo: lo que casi no se mueve.
+
+  De la ruta sale **únicamente la carpeta en la que estás**, no el camino entero;
+  y si se llama igual que el repo —es decir, estás en su raíz— **desaparece**,
   porque eso ya lo dice la banda 2.
+
+  El **estilo** es lo que ocupó el hueco que dejaron las barras de 5h/7d y el
+  reloj al subir a las bandas 1 y 2. Se gana el sitio por dos razones: es el
+  campo más lento del pie —cambia cuando lo cambias tú, no una vez por turno— y
+  es el único que dice **qué carácter te está contestando**, cosa que el resto de
+  la statusline no tiene forma de contarte. La banda 1 lleva lo que cambia cada
+  turno y la 2 lo que la sesión ha gastado; un nombre que solo se mueve cuando lo
+  mueves tú pega justo aquí.
+
+  Los dos salen **a pelo, sin etiqueta**, y quien los distingue es el color: la
+  carpeta en gris, porque es un sitio, y el estilo en el morado de `Mode`, el
+  mismo de `xhigh` y `plan`, porque es un ajuste de la CLI. Se leen en orden
+  *dónde → quién*, y cuando la banda se queda corta **cae antes el estilo**: la
+  banda era de la carpeta primero.
+
+  El estilo sale **en minúscula**, y eso es la voz del pie, no un dato del
+  estilo: todo lo demás que ocupa ese sitio ya llega en minúscula —`xhigh`,
+  `plan`, `auto-edit`, el `cazabugs` y el `vibrante` del bicho—, así que un
+  nombre capitalizado sería la única palabra de la línea que grita. Se hace en la
+  banda y no al leer el payload por dos razones: `Payload.Style` conserva el
+  nombre real, y así entran también los dos estilos de fábrica, `Explanatory` y
+  `Learning`, que vienen capitalizados y **no se pueden renombrar**. La carpeta
+  de al lado no se toca: tiene que coincidir con lo que dice `ls`.
+
+  Sin estilo puesto el payload **no manda un hueco, manda la palabra
+  `"default"`** — `output_style: {name: outputStyle || "default"}`, leído del
+  binario 2.1.259, no supuesto. Pintarla gastaría columnas en decir que no hay
+  nada puesto, así que se suprime. Los dos elementos siguen la misma regla —si no
+  dice nada, no sale— y por eso la banda **sigue pudiendo quedar vacía**: en la
+  raíz de un repo y sin estilo, que es la mayoría de las sesiones. Esa fila se
+  ancla con un **braille en blanco** (`U+2800`): sin él, Claude Code recorta los
+  espacios de la izquierda y el trozo de bicho de esa fila se cae al borde.
 El **modo de permisos** sale como marca, no como palabra: en bypass, un `⚡`
 rojo. Claude Code ya escribe «bypass permissions on (shift+tab to cycle)» en su
 propia línea bajo el prompt —y no hay ajuste que la oculte—, así que deletrearlo
@@ -226,8 +265,11 @@ bicho desaparece y quedan las tres bandas de datos solas.
 
 ### El bicho
 
-Nueve columnas. La silueta la elige la **evolución**; los ojos, las patas y el
-color los elige el **estado**. Y viene en dos tallas: **cinco filas** en `/pet` y
+Nueve columnas. La silueta **y el color** los elige la **evolución**; los ojos,
+las patas y el peldaño de esa rampa los elige el **estado**. Cada rama tiene su
+tono y lo mantiene en los siete estados: un cazabugs es azul tanto fresco como
+ahogado, que es lo que distingue 41 siluetas en las filas que hay. Viene en dos
+tallas: **cinco filas** en `/pet` y
 en la galería de evoluciones, donde sobra sitio, y **tres** en la statusline,
 donde dos filas de terminal valen más que una cresta.
 
@@ -304,7 +346,9 @@ devuelve el baile continuo del diseño.
 
 La forma no la eliges: sale de cómo trabajas. Los commits y los `/compact` te
 llevan por la rama metódica, los tests y los planes por la inquisitiva, y
-reventar el contexto por la impulsiva.
+trabajar con el contexto arriba por la impulsiva —el **pico** de la sesión, no
+el reventón: pasar del 85% es haber tirado al límite, y del 95% es no haber
+frenado. Reventarlo del todo solo cuesta XP.
 
 ```
 chispa -> pauta / sonda / brasa -> siete oficios -> catorce marcas
@@ -334,22 +378,30 @@ encima del último umbral—, porque sin él el colchón acumulado se traga
 cualquier castigo y el bicho se queda a tope para siempre. Nunca muere: por
 abajo se queda en `chispa`, que es una forma, no una tumba.
 
-### El uso: media ponderada
+### El uso: el cuello más apretado
 
-Un solo número entre 0 y 100 decide estado, ojos, patas y color:
+Un solo número entre 0 y 100 decide estado, ojos, patas y el peldaño de la rampa:
 
 ```
-uso = 0.5 · ctx  +  0.3 · límite 5h  +  0.2 · límite 7d
+uso = max(ctx, límite 5h, límite 7d)
 ```
 
-**Por qué ponderada y no el peor de los tres.** El contexto es lo único que
-puedes gestionar en el momento —compactar, cerrar la sesión, abrir otra—; los
-límites solo avisan. Que el de 7 días vaya por el 80% no debería poner al bicho
-al borde de la muerte si acabas de abrir la sesión.
+**Por qué el peor y no una media.** Aquí hubo una media ponderada 50/30/20, y
+diluía justo el caso que importa: con la ventana llena y las cuotas ociosas daba
+58 —«a gusto», turquesa— con el contexto agotado. El máximo es lo que medía la
+primera versión del proyecto, y su comentario sigue valiendo: *«no finge
+emociones; refleja el cuello más apretado»*.
 
-Si falta alguno de los tres (las cuentas por API no reciben `rate_limits`), su
-peso se reparte entre los que sí llegan. Y **el k.o. es el único caso exacto**:
-hace falta el 100% clavado.
+A cambio, si tu límite de 7 días va por el 95% el bicho estará `drowning` toda la
+semana aunque abras la sesión con la ventana vacía. El razonamiento entero está
+en [vitals.md](docs/design/vitals.md).
+
+El que falta no compite: las cuentas por API no reciben `rate_limits`. El k.o.
+sigue siendo el único caso exacto —hace falta un 100% clavado—, pero ya no
+necesita un caso especial para llegar.
+
+La **barra de contexto de la banda 1** se colorea con esta misma escalera, así que
+barra y bicho dejan de contradecirse.
 
 ### Ajustes por entorno
 
@@ -470,21 +522,29 @@ activo. No es un fallo del tema.
 ## Migración desde la versión anterior
 
 El proyecto pasó de Python a Go, y el código, las claves de
-`~/.claude/pet.json` y los nombres de las 27 formas pasaron a inglés. **No hay
+`~/.claude/pet.json` y los nombres de las 41 formas pasaron a inglés. **No hay
 que hacer nada**: `scripts/install.sh` borra los ficheros
 sueltos que la versión vieja dejaba en `~/.claude/`, y el `pet.json` se traduce
 solo la primera vez que se escribe. Eso traduce las **claves** del fichero
 (`hambre` pasó a `hunger`) y los ids de las formas (`chispa` pasó a `spark`);
 lo que lees en pantalla volvió al castellano con el rediseño, pero el fichero
 sigue guardando los ids. El bicho conserva xp, racha, contadores y forma
-secreta. Los tres lanzadores viejos que la versión de Python dejaba sueltos en
+secreta. Los cuatro lanzadores viejos que la versión de Python dejaba sueltos en
 `~/.claude/` (`statusline.sh`, `bicho.py`, `pet`, `pet-hook.sh`) los borra el
 instalador.
 
 Lo único que hay que cambiar a mano son las variables de entorno, si las tenías
-puestas: `STATUSLINE_PET` → `STATUSLINE_PET`, `STATUSLINE_PET_WALK` →
-`STATUSLINE_PET_WALK`, `STATUSLINE_BACKGROUND` → `STATUSLINE_BACKGROUND`,
-`STATUSLINE_RULE` → `STATUSLINE_RULE`.
+puestas. El código **no lee las viejas**, así que una que se quede sin renombrar
+no da error: deja de tener efecto y la statusline vuelve a su valor por defecto.
+
+| Antes | Ahora |
+| --- | --- |
+| `STATUSLINE_BICHO` | `STATUSLINE_PET` |
+| `STATUSLINE_BICHO_ANDA` | `STATUSLINE_PET_WALK` |
+| `STATUSLINE_FONDO` | `STATUSLINE_BACKGROUND` |
+| `STATUSLINE_REGLA` | `STATUSLINE_RULE` |
+
+`STATUSLINE_RIGHT_PAD` y `PET_TEST_RUNNERS` no cambiaron de nombre.
 
 ## Licencia
 

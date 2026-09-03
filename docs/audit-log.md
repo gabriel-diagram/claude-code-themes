@@ -337,6 +337,13 @@ Ahora el k.o. tiene **puerta propia**: salta en cuanto el contexto llega al 100%
 sin mirar la media. Es coherente con por qué la media pondera 50/30/20 — el
 contexto es lo único que te para de verdad — y no toca ningún otro estado.
 
+> **Nota posterior.** Esa puerta ya no existe, y este apartado explica por qué
+> hizo falta: era el síntoma, no la enfermedad. La causa era la media, que no
+> puede llegar a 100 si no llegan los tres consumos. El uso volvió a ser el
+> **cuello más apretado** —lo que medía la primera versión—, que llega a 100 él
+> solo, así que la puerta sobraba y se fue con ella. Ver
+> [design/vitals.md](design/vitals.md).
+
 ### 6 · La calma es el defecto
 
 `STATUSLINE_BICHO_CALMA` pasó de ser un apaño opcional a no existir (se perdió al

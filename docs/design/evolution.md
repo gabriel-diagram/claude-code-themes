@@ -23,8 +23,9 @@ ojos y una fila de patas:
  ▘▘   ▝▝    <- las patas las pone el estado
 ```
 
-El estado de vida **no cambia la silueta**: rellena los huecos y elige el color.
-Por eso las 27 evoluciones tienen sus siete estados sin dibujar 189 sprites.
+El estado de vida **no cambia la silueta ni el tono**: rellena los huecos y baja
+por la rampa de la rama. El color pertenece a la evolución, no al estado. Por eso
+las 41 evoluciones tienen sus siete estados sin dibujar 287 sprites.
 
 Los ojos siguen una regla: la evolución pone los suyos mientras está entera
 (*fresh* y *lively*), y de *easy* para abajo manda el estado
@@ -77,6 +78,28 @@ Ahora paga el **pico de contexto de la sesión**: a partir del `ImpulsivePeak`
 —«tira al límite sin frenar»— y no lo mismo que estrellarse. Es el espejo de
 `ctx_low`, que premia al que no pasa del 60 y lleva a `pulcro`.
 
+**Y un nivel más abajo pasaba lo mismo.** `ctx_maxed`, que elige `feral` entre
+sus dos hermanos, tenía la aritmética cerrada exactamente igual: su única fuente
+era el reventón, mientras que `short_sessions` y `long_sessions` se cobraban
+gratis con solo tener sesiones. Ahora los tres contadores que leen la rama brasa
+son **tres muescas del mismo gesto**, y ninguno se paga en XP:
+
+| Pico de la sesión | Contador | Para qué |
+| --- | --- | --- |
+| ≥ 85 (`ImpulsivePeak`) | `impulsive` | nivel 2 — `ember` |
+| ≥ 95 (`FeralPeak`) | `ctx_maxed` | nivel 3 — `feral` |
+| ≥ 100 | `ctx100_sessions` | la marca `kraken` |
+
+El reventón (`overflow`) ya no alimenta ningún hábito: es lo que siempre debió
+ser, un castigo de −15 XP que además rompe las rachas limpias.
+
+**Cuidado con el empate.** Una sesión de más de 90 minutos con el pico arriba
+sube `ctx_maxed` *y* `long_sessions`, uno cada uno, y quedan empatados para
+siempre; el desempate va al orden del lienzo, así que gana `marathon`. `feral`
+es para quien llena la ventana **rápido**: sesiones cortas al límite. Es la
+distinción que la rama está dibujando, y hay un test que la fija
+(`TestALongSessionAtTheLimitStillGoesToMarathon`).
+
 **Los nombres del árbol son ids, no texto.** `spark`, `bughunter` o `exterminator`
 son lo que hay escrito en `pet.json` desde la versión en Python, y renombrarlos
 reescribiría todos los ficheros de vida que hay por ahí. Lo que se lee en
@@ -107,6 +130,37 @@ Las dos son formas de **nivel 5** y esperan a los 900 XP como cualquier otra. La
 condición se cumple antes —la de la quimera, a nivel 4— y entre una cosa y la
 otra el panel dice a qué aspiras: `488 para quimera`. Entregarla en el acto se
 saltaba el nivel 4 entero y ponía un «nivel 5» al lado de 412 XP.
+
+## Una forma no baja de escalón
+
+La forma se recalcula desde los contadores en **cada refresco** y no está
+grabada, así que lo que el bicho *es* puede cambiar de una línea a la
+siguiente. Lo que no puede es bajar por el árbol.
+
+Dos hábitos se van a cero cuando revientas el contexto —`test_streak` y
+`diff_streak`, las dos rachas limpias— y sin un suelo eso era una caída: una
+`avispa` de nivel 6 volvía como `cazabugs`, una forma de nivel 3, con el
+rótulo «nivel 6» al lado. `pet.json` guarda ahora en `form_seen` el peldaño más
+alto pisado, y `pet.Save` lo anota **en cada escritura**, de modo que ningún
+camino puede persistir un bicho y olvidarse de dónde está.
+
+La regla es que una forma solo se mueve **en lateral o hacia arriba**:
+
+| desde | pasa a | por qué |
+| --- | --- | --- |
+| `exterminador` | `sabueso` | mismo peldaño, el otro hábito |
+| `exterminador` | `avispa` | hacia arriba, su título |
+| `exterminador` | `cazabugs` | **nunca**: sería bajar de peldaño |
+
+Dos consecuencias que conviene conocer:
+
+- **Cambiar de temperamento ya no cambia la forma** una vez llevas una marca.
+  El camino desde la raíz aterriza en un oficio, peldaño 3, y el suelo no baja
+  a buscarlo. Se mueve en cuanto ganas una marca en la rama nueva.
+- **El nivel sí puede bajar**, y la forma no. Son dos hechos distintos: la
+  forma es una marca de agua y el nivel es la xp de hoy, que cae al reventar el
+  contexto (−15) y mientras el bicho pasa hambre. Así que `avispa nivel 5` es
+  una pareja que se puede ver, y no es un fallo.
 
 ## La comida
 
@@ -174,15 +228,19 @@ Las cifras viven en `StarveXP` y `XPCeiling`, y hay un test
 
 ## Qué alimenta cada contador
 
-Los hooks (`bin/pet-hook`) y la propia statusline traducen lo que haces en
-contadores. **Las 27 evoluciones son alcanzables**: los siete oficios, las
-catorce marcas y las dos secretas.
+El hook (`ccpet hook`) y la propia statusline traducen lo que haces en
+contadores. **Las 41 evoluciones son alcanzables**: la raíz, los tres
+temperamentos, los siete oficios, las catorce marcas, los catorce títulos y las
+dos secretas. Y siguen siéndolo con el bicho ya crecido, que es lo que
+`TestEveryFormIsReachableFromAVeteran` fija: en cada bifurcación gana el hábito
+que más lejos ha llegado *respecto a lo que pide*, no el primero que cruzó su
+umbral, así que ninguna puerta se cierra a tu espalda.
 
 | Contador | Se llena con | Quién lo ve |
 | --- | --- | --- |
-| `metodico` | commits y `/compact` | hook |
-| `inquisitivo` | tests y tareas del plan | hook |
-| `impulsivo`, `ctx_maxed` | reventones de contexto | statusline |
+| `methodical` | commits y `/compact` | hook |
+| `inquisitive` | tests y tareas del plan | hook |
+| `impulsive`, `ctx_maxed` | el pico de contexto de la sesión (85 / 95) | statusline → `SessionEnd` |
 | `diffs`, `diff_streak` | commits (la racha se rompe al reventar) | hook |
 | `tests`, `test_streak` | tests en verde (íd.) | hook |
 | `widest_commit` | el `N files changed` más alto | hook |
@@ -194,7 +252,7 @@ catorce marcas y las dos secretas.
 | `bypass_turns` | prompts nuevos con los permisos en bypass | statusline + transcript |
 | `ctx_low`, `sessions_under_40` | el pico de contexto de la sesión | statusline → `SessionEnd` |
 | `short_sessions`, `sessions_15min`, `long_sessions`, `sessions_4h` | la duración de la sesión | íd. |
-| `ctx100_sessions` | tocar el 100% de contexto | íd. |
+| `ctx100_sessions` | tocar el 100% de contexto (la tercera muesca) | íd. |
 | `same_repo_days` | días seguidos cerrando sesión en el mismo repo | íd. |
 
 Tres datos **solo los ve la statusline**, porque no llegan a ningún hook: el uso
