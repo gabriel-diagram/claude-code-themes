@@ -199,6 +199,12 @@ el propio Claude Code: aquello es suyo y no se puede tocar.
   gris. De la ruta sale **solo la carpeta en la que estás**, no el camino entero;
   y si se llama igual que el repo —- es decir, estás en su raíz—- desaparece,
   porque eso ya lo dice la banda 2.
+El **modo de permisos** sale como marca, no como palabra: en bypass, un `⚡`
+rojo. Claude Code ya escribe «bypass permissions on (shift+tab to cycle)» en su
+propia línea bajo el prompt —y no hay ajuste que la oculte—, así que deletrearlo
+otra vez ponía la misma palabra dos veces en el mismo pie. `plan` y `auto-edit`
+conservan su nombre: no tienen glifo evidente y uno inventado sería un acertijo.
+
 - **Banda 4 · el bicho** — **oficio, nivel, barra y bocadillo**. Cómo está no
   va aquí: la etiqueta de estado ya corona la tarjeta, y el lienzo la dibuja
   dos veces, pero en una terminal de verdad la misma palabra acaba en el mismo

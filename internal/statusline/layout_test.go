@@ -283,3 +283,37 @@ func TestBandFourStillCollapsesToTheTradeWhenNarrow(t *testing.T) {
 		t.Errorf("below 100 columns band 4 is %q, want just the trade", line)
 	}
 }
+
+func TestTheBypassMarkIsOneCellWide(t *testing.T) {
+	// Width() counts runes, not columns. A glyph the terminal draws double
+	// would measure 1 here and take 2 on screen, sliding the card out of
+	// true - and nothing else in the footer would notice.
+	if n := len([]rune(BypassMark)); n != 1 {
+		t.Errorf("the mark is %d runes: %q", n, BypassMark)
+	}
+	if theme.Width(BypassMark) != 1 {
+		t.Errorf("the mark measures %d", theme.Width(BypassMark))
+	}
+}
+
+func TestTheBypassBadgeDoesNotSpellTheWord(t *testing.T) {
+	// The CLI already writes "bypass permissions on" under the prompt box.
+	band := assemble(engine(&Payload{Model: "Opus 5", Permissions: "bypass"}, nil), 140)
+	line := theme.Strip(band)
+	if strings.Contains(line, "bypass") {
+		t.Errorf("band 1 still spells it out: %q", line)
+	}
+	if !strings.Contains(line, BypassMark) {
+		t.Errorf("the mark is missing: %q", line)
+	}
+}
+
+func TestTheOtherModesKeepTheirName(t *testing.T) {
+	for _, mode := range []string{"plan", "auto-edit"} {
+		line := theme.Strip(assemble(
+			engine(&Payload{Model: "Opus 5", Permissions: mode}, nil), 140))
+		if !strings.Contains(line, mode) {
+			t.Errorf("%q lost its name: %q", mode, line)
+		}
+	}
+}

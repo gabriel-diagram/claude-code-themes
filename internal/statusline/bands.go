@@ -100,14 +100,20 @@ func engine(p *Payload, tps *float64) []segment {
 	}
 
 	if p.Permissions != "" {
-		// The CLI paints its own "bypass permissions" footer line; this is a
-		// badge in the band, not a copy of that line, which is not ours.
+		// The CLI paints its own line under the prompt box announcing the
+		// mode - "bypass permissions on (shift+tab to cycle)" - so spelling
+		// "bypass" here put the same word on the same footer twice. Bypass
+		// gets a mark instead: the signal stays, the word does not repeat,
+		// and the busiest band gets five columns back. The other two keep
+		// their name, which has no obvious glyph and would only be a riddle.
 		paint := theme.Fg(theme.Mode) + theme.Bold
+		text := p.Permissions
 		if p.Permissions == "bypass" {
 			paint = theme.Fg(theme.Bad) + theme.Bold
+			text = BypassMark
 		}
-		out = append(out, seg(3, paint+p.Permissions+theme.Reset).
-			truncatable(paint, p.Permissions))
+		out = append(out, seg(3, paint+text+theme.Reset).
+			truncatable(paint, text))
 	}
 
 	if p.Vim != "" {
@@ -212,6 +218,11 @@ func petBand(c Card, columns int) []segment {
 	}
 	return out
 }
+
+// BypassMark stands in for the word "bypass", which the CLI already spells out
+// on its own line. Width() counts runes, not columns, so a glyph the terminal
+// draws double would slide the card out of true - keep this one cell wide.
+const BypassMark = "⚡"
 
 // xpBarWidth is the twelve cells the canvas draws in band 4.
 const xpBarWidth = 12
