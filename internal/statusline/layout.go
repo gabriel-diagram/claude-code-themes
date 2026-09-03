@@ -125,10 +125,10 @@ func assemble(segments []segment, width int) string {
 			keep = 1
 		}
 		if it.hasPlain {
-			text := theme.TruncateRunes(it.plain, keep) + "…"
+			text := theme.Truncate(it.plain, keep) + "…"
 			it.text = it.paint + text + theme.Reset
 		} else {
-			it.text = theme.TruncateRunes(theme.Strip(it.text), keep) + "…"
+			it.text = theme.Truncate(theme.Strip(it.text), keep) + "…"
 		}
 		it.width = theme.Width(it.text)
 		items = []segment{it}

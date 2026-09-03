@@ -2,7 +2,7 @@ package theme
 
 import "testing"
 
-func TestStripAndWidthCountRunesNotBytes(t *testing.T) {
+func TestStripAndWidthCountCellsNotBytes(t *testing.T) {
 	// Box-drawing glyphs are three bytes each: a byte count would report 9 for
 	// a three-column sprite row and knock the whole card out of square.
 	painted := Fg(Path) + "▗█▖" + Reset

@@ -3,7 +3,6 @@ package theme
 import (
 	"math"
 	"strings"
-	"unicode/utf8"
 )
 
 // Strip removes SGR escape sequences. Hand-rolled rather than a regexp: this
@@ -33,9 +32,11 @@ func Strip(s string) string {
 }
 
 // Width is the columns the string occupies once the escapes are gone. Counted
-// in runes: the sprites are box-drawing characters, three bytes each.
+// in CELLS, not runes and not bytes: the sprites are box-drawing characters,
+// three bytes and one cell each, and a repo or branch name can carry glyphs the
+// terminal draws two cells wide. See width.go.
 func Width(s string) int {
-	return utf8.RuneCountInString(Strip(s))
+	return StringWidth(Strip(s))
 }
 
 // PadRight pads to width, measuring visible columns.
@@ -49,23 +50,32 @@ func PadRight(s string, width int) string {
 
 // Centre centres painted by measuring plain, its uncoloured twin.
 func Centre(plain, painted string, width int) string {
-	n := width - utf8.RuneCountInString(plain)
+	n := width - StringWidth(plain)
 	if n < 0 {
 		return painted
 	}
 	return strings.Repeat(" ", n/2) + painted + strings.Repeat(" ", n-n/2)
 }
 
-// TruncateRunes cuts to at most n runes.
-func TruncateRunes(s string, n int) string {
+// Truncate cuts to at most n CELLS. Cutting by runes let a name of wide glyphs
+// come back twice as long as the space it was cut to fit.
+//
+// A wide glyph that would straddle the last cell is dropped whole: half of one
+// is not a character the terminal can draw, and the cell it leaves is padded by
+// the caller.
+func Truncate(s string, n int) string {
 	if n <= 0 {
 		return ""
 	}
-	r := []rune(s)
-	if len(r) <= n {
-		return s
+	used := 0
+	for i, r := range s {
+		w := RuneWidth(r)
+		if used+w > n {
+			return s[:i]
+		}
+		used += w
 	}
-	return string(r[:n])
+	return s
 }
 
 // Bar draws a width-wide bar. value is clamped into [0, total].

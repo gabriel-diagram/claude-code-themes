@@ -284,15 +284,13 @@ func TestBandFourStillCollapsesToTheTradeWhenNarrow(t *testing.T) {
 	}
 }
 
-func TestTheBypassMarkIsOneCellWide(t *testing.T) {
-	// Width() counts runes, not columns. A glyph the terminal draws double
-	// would measure 1 here and take 2 on screen, sliding the card out of
-	// true - and nothing else in the footer would notice.
-	if n := len([]rune(BypassMark)); n != 1 {
-		t.Errorf("the mark is %d runes: %q", n, BypassMark)
-	}
-	if theme.Width(BypassMark) != 1 {
-		t.Errorf("the mark measures %d", theme.Width(BypassMark))
+func TestTheBypassMarkIsMeasuredAndNotAssumed(t *testing.T) {
+	// This used to demand a one-cell glyph, because Width() counted runes and a
+	// wide one would measure 1 and draw 2. The mark is in fact two cells - it
+	// always was - and now that cells are what gets counted, the requirement is
+	// no longer "keep it narrow" but "keep the band honest about it".
+	if theme.Width(BypassMark) != 2 {
+		t.Errorf("the mark measures %d, want 2", theme.Width(BypassMark))
 	}
 }
 
