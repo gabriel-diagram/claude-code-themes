@@ -144,7 +144,23 @@ func Speak(s *State, e Event, form string, now time.Time, pick func(int) int) st
 		}
 	}
 	if len(fresh) == 0 {
-		fresh = options // repertorio agotado: vuelve a empezar
+		// Repertorio agotado: vuelve a empezar. Pero no con la que acaba de
+		// decir - a form has three lines and SaidMemory is three, so the
+		// filter empties every third time, and starting over from the whole
+		// list let it say the same line twice in a row. Everything else about
+		// the order goes unnoticed; that does not.
+		last := ""
+		if n := len(s.Said); n > 0 {
+			last = s.Said[n-1]
+		}
+		for _, line := range options {
+			if line != last {
+				fresh = append(fresh, line)
+			}
+		}
+		if len(fresh) == 0 {
+			fresh = options // un repertorio de una sola frase
+		}
 	}
 	if pick == nil {
 		pick = rand.Intn

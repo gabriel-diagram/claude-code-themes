@@ -1238,3 +1238,60 @@ func TestAnOldFileKeepsItsFeedCooldown(t *testing.T) {
 		t.Error("an hour after a hand-feed it ate again; the cooldown is four")
 	}
 }
+
+func TestItNeverSaysTheSameLineTwiceRunning(t *testing.T) {
+	// A form carries three lines and SaidMemory is three, so the "not
+	// recently" filter empties every third time. Starting over from the whole
+	// repertoire let it repeat the line it had just said, which is the one
+	// kind of repetition anybody notices.
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	for _, form := range []string{"bughunter", "refactor", "spark", "feral"} {
+		s := New()
+		s.XP = 300
+		previous := ""
+		for i := 0; i < 40; i++ {
+			at := now.Add(time.Duration(i) * 10 * time.Minute)
+			line := Speak(s, EventBigMeal, form, at, nil)
+			if line == "" {
+				t.Fatalf("%s went quiet on turn %d", form, i)
+			}
+			if line == previous {
+				t.Errorf("%s said %q twice running, on turn %d", form, line, i)
+			}
+			previous = line
+		}
+	}
+}
+
+func TestASingleLineRepertoireStillSpeaks(t *testing.T) {
+	// The guard above must not gag a form that only has one thing to say.
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	Repertoire["testonly"] = []string{"una sola cosa que decir"}
+	defer delete(Repertoire, "testonly")
+
+	s := New()
+	s.XP = 300
+	for i := 0; i < 3; i++ {
+		at := now.Add(time.Duration(i) * 10 * time.Minute)
+		if line := Speak(s, EventBigMeal, "testonly", at, nil); line == "" {
+			t.Fatalf("a one-line repertoire went quiet on turn %d", i)
+		}
+	}
+}
+
+func TestTheWholeRepertoireGetsAired(t *testing.T) {
+	// Not repeating must not turn into only ever saying two of the three.
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	s := New()
+	s.XP = 300
+	seen := map[string]int{}
+	for i := 0; i < 300; i++ {
+		at := now.Add(time.Duration(i) * 10 * time.Minute)
+		seen[Speak(s, EventBigMeal, "bughunter", at, nil)]++
+	}
+	for _, line := range Repertoire["bughunter"] {
+		if seen[line] == 0 {
+			t.Errorf("%q never came up in 300 turns", line)
+		}
+	}
+}
