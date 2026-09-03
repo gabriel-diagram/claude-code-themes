@@ -34,6 +34,11 @@ var editTools = map[string]bool{
 // planMinTasks is what counts as a plan for the oracle.
 const planMinTasks = 3
 
+// ImpulsivePeak is the context peak a session has to reach to count as having
+// been run at the limit. It sits above "cansada" and below "ahogada": high
+// enough that it was not a comfortable session, short of the crash.
+const ImpulsivePeak = 85
+
 // hookState is the per-session scratch this package owns.
 type hookState struct {
 	Code int `json:"code"`
@@ -345,6 +350,19 @@ func CloseSession(factsPath, statePath string, now time.Time) {
 	}
 	if facts.Peak < 60 {
 		s.Bump("ctx_low", 1)
+	}
+	// The mirror of ctx_low, and the only way the ember branch can be reached
+	// at all. Its counter used to come from ONE place - blowing the context -
+	// and that is the single meal that TAKES XP away, so the arithmetic was
+	// closed: every point of "impulsive" cost 15 XP, and every meal that paid
+	// it back fed a rival counter. Somebody who blew the context all day ended
+	// up at 800 impulsive and still stuck on level 1 at zero XP, with a third
+	// of the tree behind a branch nobody could take.
+	//
+	// The canvas asks for "tira al límite sin frenar", which is a session
+	// spent high up, not a session that crashed. So it is the peak that pays.
+	if facts.Peak >= ImpulsivePeak {
+		s.Bump("impulsive", 1)
 	}
 	if facts.Peak >= 99.999 {
 		s.Bump("ctx100_sessions", 1)

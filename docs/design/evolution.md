@@ -65,6 +65,18 @@ spark
 que va más alto en ese momento. Si cambias de hábitos antes de subir de nivel,
 cambias de rama.
 
+**Y las tres ramas se pueden tomar.** La impulsiva estuvo muerta: su contador
+solo lo subía *reventar el contexto*, que es la única comida que **resta** XP.
+La aritmética se cerraba sola —cada punto de `impulsive` costaba 15 XP, y toda
+comida que los devolvía alimentaba a un rival—, así que quien reventaba el
+contexto todo el día acababa con 800 de impulsivo y clavado en el nivel 1 con
+0 XP. Un tercio del árbol detrás de una rama que nadie podía subir.
+
+Ahora paga el **pico de contexto de la sesión**: a partir del `ImpulsivePeak`
+(85%) cuenta como haber trabajado al límite, que es lo que pide el lienzo
+—«tira al límite sin frenar»— y no lo mismo que estrellarse. Es el espejo de
+`ctx_low`, que premia al que no pasa del 60 y lleva a `pulcro`.
+
 **Los nombres del árbol son ids, no texto.** `spark`, `bughunter` o `exterminator`
 son lo que hay escrito en `pet.json` desde la versión en Python, y renombrarlos
 reescribiría todos los ficheros de vida que hay por ahí. Lo que se lee en
@@ -107,6 +119,9 @@ saltaba el nivel 4 entero y ponía un «nivel 5» al lado de 412 XP.
 | `/feed` | **+3** | −2 | uno cada 4 h |
 | contexto al 100% | **−15** | — | — |
 | cada hora a hambre 10 | **−1** | — | — |
+
+Y al cerrar sesión, sin XP de por medio: pico bajo del 60% suma `ctx_low`
+(hacia `pulcro`), pico por encima del 85% suma `impulsive` (hacia `brasa`).
 
 **Por qué la suite verde tiene freno.** Era la comida más grande de la tabla y
 la única sin ningún tope, así que era lo único que compensaba farmear: correr

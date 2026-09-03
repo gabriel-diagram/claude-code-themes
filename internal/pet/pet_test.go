@@ -1295,3 +1295,108 @@ func TestTheWholeRepertoireGetsAired(t *testing.T) {
 		}
 	}
 }
+
+// reach builds the smallest state that should produce the given form: the XP
+// its depth needs, the branch counter of every step on its way, and its own
+// habit if it is a mark. Siblings are left at zero so the fork is unambiguous.
+func reach(form string) *State {
+	s := New()
+	trail := Lineage(form)
+	switch len(trail) {
+	case 1:
+		s.XP = 0
+	case 2:
+		s.XP = Levels[1].XP
+	case 3:
+		s.XP = Levels[2].XP
+	default:
+		s.XP = Levels[len(Levels)-1].XP
+	}
+	for _, step := range trail {
+		if counter, ok := BranchBy[step]; ok {
+			s.Counters[counter] = 999
+		}
+		if u, ok := Unlocks[step]; ok {
+			s.Counters[u.Counter] = u.Threshold
+		}
+	}
+	return s
+}
+
+func TestEveryFormCanActuallyBeReached(t *testing.T) {
+	// Having a sprite and having an unlock is not the same as being
+	// reachable: a mark whose counter nobody feeds, or a fork whose sibling
+	// always wins, would be a form nobody can ever see.
+	for _, form := range allForms() {
+		if form == "phoenix" || form == "chimera" {
+			continue // off the tree, covered below
+		}
+		s := reach(form)
+		if got, _ := CurrentForm(s); got != form {
+			t.Errorf("%s is unreachable: that state gives %s", form, got)
+		}
+	}
+}
+
+func TestBothSecretsCanBeReached(t *testing.T) {
+	for _, secret := range Secrets {
+		s := New()
+		s.XP = Levels[len(Levels)-1].XP
+		s.Secret = Secret(secret)
+		if got, level := CurrentForm(s); got != secret || level != 5 {
+			t.Errorf("%s is unreachable: gives %s/%d", secret, got, level)
+		}
+	}
+}
+
+func TestEveryCounterTheTreeNeedsHasAFeeder(t *testing.T) {
+	// A counter nothing ever increments makes its form unreachable in
+	// practice, however well the tree is wired.
+	needed := map[string]string{}
+	for form, counter := range BranchBy {
+		needed[counter] = "the fork to " + form
+	}
+	for form, u := range Unlocks {
+		needed[u.Counter] = "the mark " + form
+	}
+
+	// Everything a meal bumps, plus what the hook and the statusline bump by
+	// hand. Kept as data so a counter that loses its feeder shows up here.
+	fed := map[string]bool{
+		// hook/app.go and statusline/card.go
+		"repro_before_fix": true, "plans_before_code": true, "longest_plan": true,
+		"single_tool_tasks": true, "sessions_under_40": true, "ctx_low": true,
+		"sessions_15min": true, "short_sessions": true, "sessions_4h": true,
+		"long_sessions": true, "same_repo_days": true, "docs_days": true,
+		"widest_commit": true, "ctx100_sessions": true, "bypass_turns": true,
+	}
+	for _, food := range Foods {
+		for _, habit := range food.Habits {
+			fed[habit] = true
+		}
+	}
+
+	for counter, why := range needed {
+		if !fed[counter] {
+			t.Errorf("nothing feeds %q, so %s can never happen", counter, why)
+		}
+	}
+}
+
+func allForms() []string {
+	seen := map[string]bool{Root: true}
+	for parent, kids := range Tree {
+		seen[parent] = true
+		for _, kid := range kids {
+			seen[kid] = true
+		}
+	}
+	for _, s := range Secrets {
+		seen[s] = true
+	}
+	out := make([]string, 0, len(seen))
+	for f := range seen {
+		out = append(out, f)
+	}
+	return out
+}
