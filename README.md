@@ -169,7 +169,7 @@ menor prioridad antes que hacer *wrap* (que descuadra la caja del prompt):
  Opus 5  ██████░░░░░░░░░░ 36% · 1M ctx │ xhigh                                                   vibrante 
 rochas-energy-backend │ +184/−37 │ $28.29                                                         ▗▟┼█┼▙▖ 
 api │ 5h ████░░░░░░ 41%  7d █░░░░░░░░░ 13% │ 1h 12m                                              ▐█ > < █▌
-refactor nivel 4 █████░░░░░░░ vibrante │ ◗ cinco días de racha. mañana no me falles.              ▘▝▜█▛▝▘ 
+refactor nivel 4 █████░░░░░░░ │ ◗ cinco días de racha. mañana no me falles.                       ▝▘▜█▛▘▝ 
 ```
 
 - **Banda 1 · motor** — modelo, contexto, razonamiento y ritmo: lo que cambia
@@ -199,11 +199,11 @@ el propio Claude Code: aquello es suyo y no se puede tocar.
   gris. De la ruta sale **solo la carpeta en la que estás**, no el camino entero;
   y si se llama igual que el repo —- es decir, estás en su raíz—- desaparece,
   porque eso ya lo dice la banda 2.
-- **Banda 4 · el bicho** — quién es, cuánto lleva, cómo está y lo que tenga que
-  decir: **oficio, nivel, barra, estado y bocadillo**. El estado sale aquí
-  además de coronar la tarjeta, que es lo que dibuja el lienzo y no la
-  duplicación que parece: la tarjeta es lo primero que se cae al estrechar la
-  terminal, y esta copia es la que aguanta.
+- **Banda 4 · el bicho** — **oficio, nivel, barra y bocadillo**. Cómo está no
+  va aquí: la etiqueta de estado ya corona la tarjeta, y el lienzo la dibuja
+  dos veces, pero en una terminal de verdad la misma palabra acaba en el mismo
+  pie a pocas columnas de sí misma y se lee como un fallo. Se queda la de la
+  tarjeta, que tiene una fila para ella sola.
 
   La barra mide **el tramo de este nivel**, no la xp total, así que amanece
   vacía el día después de subir. En el tope, donde ya no queda escalera, cambia

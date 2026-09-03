@@ -164,11 +164,11 @@ func work(p *Payload) []segment {
 // the three data bands and alongside the card, so the four rows on the left
 // line up with the four on the right.
 //
-// The state is here as well as on the card, which is what the canvas draws and
-// which is not the duplication it looks like. The card centres it in nine
-// columns and the card is the first thing to go when the terminal narrows;
-// this copy is the one that survives, and it is what keeps the band standing
-// when the bar has nothing left to measure.
+// How it feels is NOT here, even though the canvas draws it twice. On a real
+// terminal the same word ends up on the same footer within a few columns of
+// itself and reads as a bug; the canvas never had to look at it running. The
+// card's copy is the one that stays, because it is the one with a whole row
+// to itself.
 //
 // Below BubbleMin columns it collapses to just the trade name - the canvas:
 // "con menos de 100 columnas se cae sola y solo queda el oficio".
@@ -202,15 +202,6 @@ func petBand(c Card, columns int) []segment {
 				theme.Fg(theme.Number)+c.Mark+theme.Reset).
 				truncatable(theme.Fg(theme.Number), c.Mark).withSep(" "))
 		}
-	}
-
-	// The state goes before the bar when the width bites: between the floor
-	// and a comfortable terminal the card is still on screen carrying its own
-	// copy, and the bar is not written anywhere else.
-	if c.State != "" {
-		out = append(out, seg(4,
-			theme.Fg(c.Vital.Colour)+c.State+theme.Reset).
-			truncatable(theme.Fg(c.Vital.Colour), c.State).withSep(" "))
 	}
 
 	if c.Bubble != "" {

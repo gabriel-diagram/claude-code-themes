@@ -206,32 +206,42 @@ func TestContextLabelAndDuration(t *testing.T) {
 	}
 }
 
-func TestBandFourCarriesTheStateTheCanvasDraws(t *testing.T) {
-	// The canvas, artboard 01: "Banda 4 - el bicho. Oficio, nivel, XP y
-	// estado, y detrás lo que tenga que decir." The state was the missing one.
+func TestTheStateIsSaidOnceNotTwice(t *testing.T) {
+	// The canvas draws it on the card AND in band 4, but on a real terminal
+	// the same word lands on the same footer twice and reads as a bug. The
+	// card's copy is the one that stays.
 	lines := render(t, payload, 140)
-	last := theme.Strip(lines[len(lines)-1])
+	footer := theme.Strip(strings.Join(lines, "\n"))
 
-	// The card is pinned to the right of band 1, cardWidth columns of it.
-	// Counted from the end, because the rule on top is optional.
-	row := []rune(theme.Strip(lines[len(lines)-4]))
-	label := strings.TrimSpace(string(row[len(row)-cardWidth:]))
-	label = strings.TrimSpace(strings.TrimSuffix(label, "✦"))
-	if label == "" {
-		t.Fatal("the card has no state label to compare against")
+	said := ""
+	for _, v := range pet.Vitals {
+		if name := pet.Names[v.Label]; name != "" && strings.Contains(footer, name) {
+			said = name
+			break
+		}
 	}
-	if !strings.Contains(last, label) {
-		t.Errorf("band 4 %q does not carry the state %q", last, label)
+	if said == "" {
+		t.Fatalf("the footer carries no state at all:\n%s", footer)
+	}
+	if n := strings.Count(footer, said); n != 1 {
+		t.Errorf("%q appears %d times on one footer, want once:\n%s", said, n, footer)
+	}
+
+	// And it is the card that carries it, not the band.
+	last := theme.Strip(lines[len(lines)-1])
+	row := []rune(last)
+	band := strings.TrimSpace(string(row[:len(row)-cardWidth-cardGap]))
+	if strings.Contains(band, said) {
+		t.Errorf("band 4 kept a copy of the state: %q", band)
 	}
 }
 
-func TestBandFourKeepsTheStateWhenTheBarIsGone(t *testing.T) {
-	// At the top of the ladder with the mark already worn there is no bar
-	// left. The band must not fall back to a stub of trade plus level.
+func TestAtTheTopTheBandIsTradeAndLevel(t *testing.T) {
+	// The mark is worn, so there is no bar left to draw. The band is short by
+	// design here - the state that used to pad it lives on the card now.
 	band := petBand(Card{
 		Form:  "exterminador",
 		Level: 5,
-		State: "vibrante",
 		Vital: pet.StateFor(20, nil),
 	}, 140)
 	line := theme.Strip(assemble(band, 140))
@@ -239,9 +249,6 @@ func TestBandFourKeepsTheStateWhenTheBarIsGone(t *testing.T) {
 		if !strings.Contains(line, want) {
 			t.Errorf("band 4 %q is missing %q", line, want)
 		}
-	}
-	if theme.Width(line) <= theme.Width("exterminador   nivel 5") {
-		t.Errorf("band 4 came out bare at the top: %q", line)
 	}
 }
 
@@ -252,7 +259,6 @@ func TestBandFourSwapsTheBarForTheHabitAtTheTop(t *testing.T) {
 		Done:  12,
 		Span:  15,
 		Mark:  "exterminador",
-		State: "vibrante",
 		Vital: pet.StateFor(20, nil),
 	}, 140)
 	line := theme.Strip(assemble(band, 140))
@@ -270,7 +276,6 @@ func TestBandFourStillCollapsesToTheTradeWhenNarrow(t *testing.T) {
 	band := petBand(Card{
 		Form:  "bughunter",
 		Level: 5,
-		State: "vibrante",
 		Vital: pet.StateFor(20, nil),
 	}, 90)
 	line := theme.Strip(assemble(band, 90))

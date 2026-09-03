@@ -25,11 +25,9 @@ type Card struct {
 	Bubble string
 	Facts  *session.Facts
 
-	// Form, State and Mark are what a person READS - the canvas's Spanish, not
-	// the English ids pet.json stores. Vital comes along for what is not text:
-	// the colour band 4 paints the state in.
+	// Form and Mark are what a person READS - the canvas's Spanish, not the
+	// English ids pet.json stores. Vital comes along for what is not text.
 	Form  string
-	State string
 	Level int
 	Vital pet.Vital
 
@@ -149,8 +147,7 @@ func RenderCard(p *Payload, facts session.Facts, rate rateFacts, newTurn, bubble
 	out.Rows[0] = theme.Centre(head, painted, cardWidth)
 	copy(out.Rows[1:], rows[:])
 
-	out.Form, out.State = pet.Name(form), pet.Name(vital.Label)
-	out.Level, out.Vital = level, vital
+	out.Form, out.Level, out.Vital = pet.Name(form), level, vital
 	// While there is a level above, the bar is XP. At the top it swaps to the
 	// habit that opens the next mark, which is the only progress left; a pet
 	// already wearing its mark has neither, and band 4 leans on the state.
