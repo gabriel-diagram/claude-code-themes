@@ -62,6 +62,35 @@ spark
       └─ kraken........  3 sesiones tocando el 100% de contexto
 ```
 
+### Los títulos
+
+Detrás de cada marca hay un título, y pide **más del mismo hábito**. Los catorce
+números salen del lienzo [«Cómo llegar a cada forma»][canvas], que da un factor
+por título en vez de un multiplicador único: cada hábito se pesó por separado.
+
+| marca | título | pide | | marca | título | pide |
+| --- | --- | --- | --- | --- | --- | --- |
+| `surgeon` 20 | `scalpel` | **50** diffs seguidos | | `cartographer` 10 | `atlas` | **20** tareas en un plan |
+| `weaver` 10 | `loom` | **25** ficheros de un tirón | | `oracle` 5 | `sphinx` | **20** planes antes de código |
+| `monk` 5 | `abbot` | **15** sesiones bajo el 40% | | `bolt` 10 | `storm` | **30** sesiones de menos de 15 min |
+| `gardener` 2 | `forest` | **7** días de docs | | `sniper` 8 | `falcon` | **25** tareas de una herramienta |
+| `bloodhound` 10 | `wolf` | **30** repros antes del fix | | `ox` 3 | `mammoth` | **10** sesiones de más de 4 h |
+| `exterminator` 15 | `wasp` | **50** tests verdes seguidos | | `mole` 5 | `worm` | **20** días en el mismo repo |
+| | | | | `gremlin` 30 | `devil` | **200** turnos en bypass |
+| | | | | `kraken` 3 | `leviathan` | **10** sesiones al 100% |
+
+Dos no son el número del lienzo, y conviene saber por qué:
+
+- **`atlas`.** El lienzo pide «5 planes de 10 tareas cerrados», que es una
+  *cuenta* de planes grandes. El contador que hay, `longest_plan`, es el plan
+  más largo cerrado nunca — un máximo, no una cuenta. Poner 50 ahí pediría un
+  solo plan de cincuenta tareas, que es otra cosa, no una más difícil.
+- **`devil`.** El lienzo pide 100 turnos en bypass. `bypass_turns` sube unas
+  treinta veces al día — medido — así que 100 es un título que llega ya
+  cumplido, y eso no es un título. 200 lo pone en una semana, como los demás.
+
+[canvas]: https://claude.ai/design/p/4639e060-9aec-4ae3-855a-f8530ae9ab34
+
 **La rama no la eliges.** En cada bifurcación gana el contador de comportamiento
 que va más alto en ese momento. Si cambias de hábitos antes de subir de nivel,
 cambias de rama.

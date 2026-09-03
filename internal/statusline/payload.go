@@ -52,6 +52,7 @@ type Payload struct {
 
 	Permissions string
 	Repo        string
+	Root        string
 	Branch      string
 	Dirty       bool
 	Label       string
@@ -283,12 +284,21 @@ func Parse(doc map[string]any) *Payload {
 	}
 
 	if root := repoRoot(p.Cwd); root != "" {
+		p.Root = root
 		p.Branch, p.Dirty = gitStatus(p.Cwd)
 		if p.Repo == "" {
 			trimmed := strings.TrimRight(root, "/")
 			bits := strings.Split(trimmed, "/")
 			p.Repo = bits[len(bits)-1]
 		}
+	}
+
+	// The name the payload carries is the CONFIGURED one, and the CLI does not
+	// tell us whether it resolved. So the name only survives if we can find the
+	// style ourselves - otherwise the band would paint a word for a character
+	// that is not loaded. See style.go.
+	if p.Style != "" && !styleResolves(p.Style, configDir(), p.Root) {
+		p.Style = ""
 	}
 
 	p.Label = p.Repo

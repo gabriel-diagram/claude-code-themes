@@ -284,9 +284,9 @@ func TestEveryForkHasADecidingCounter(t *testing.T) {
 		for _, kid := range kids {
 			_, branch := BranchBy[kid]
 			_, unlock := Unlocks[kid]
-			// A title is the one child of its mark, and what decides it is the
-			// mark's own habit at TitleFactor times over - not a fork between
-			// siblings, so it has no BranchBy of its own.
+			// A title is the one child of its mark, and what decides it is more
+			// of the mark's own habit - not a fork between siblings, so it has
+			// no BranchBy of its own.
 			if _, title := TitleUnlock(parent); title && Titles[parent] == kid {
 				continue
 			}
@@ -990,8 +990,8 @@ func TestAtTheTopTheProgressBecomesTheHabit(t *testing.T) {
 
 func TestAMarkStillHasItsTitleToReach(t *testing.T) {
 	// The mark used to be the end of the road. There is a title behind each
-	// one now, asking for the same habit TitleFactor times over, so band 4
-	// keeps a bar to fill.
+	// one now, asking for a good deal more of the same habit, so band 4 keeps
+	// a bar to fill.
 	s := New()
 	s.XP = 900
 	s.Counters["inquisitive"] = 5
@@ -1005,13 +1005,13 @@ func TestAMarkStillHasItsTitleToReach(t *testing.T) {
 	if !ok {
 		t.Fatal("a pet wearing its mark was offered nothing to reach")
 	}
-	if mark.Form != "wasp" || mark.Threshold != Unlocks["exterminator"].Threshold*TitleFactor {
+	if mark.Form != "wasp" || mark.Threshold != TitleAsks["wasp"] {
 		t.Errorf("next = %s at %d/%d, want wasp at %d",
-			mark.Form, mark.Done, mark.Threshold, Unlocks["exterminator"].Threshold*TitleFactor)
+			mark.Form, mark.Done, mark.Threshold, TitleAsks["wasp"])
 	}
 	// And a pet wearing the TITLE has nothing beyond it.
 	s.XP = 1900
-	s.Counters["test_streak"] = Unlocks["exterminator"].Threshold * TitleFactor
+	s.Counters["test_streak"] = TitleAsks["wasp"]
 	title, _ := CurrentForm(s)
 	if title != "wasp" {
 		t.Fatalf("form is %q, want wasp", title)
@@ -1428,8 +1428,8 @@ func reach(form string) *State {
 		if u, ok := Unlocks[step]; ok {
 			s.Counters[u.Counter] = u.Threshold
 		}
-		// A title asks for its mark's habit TitleFactor times over, so the
-		// state that reaches one has to carry the bigger number.
+		// A title asks for a good deal more of its mark's habit, so the state
+		// that reaches one has to carry the bigger number.
 		if parent, ok := Parent[step]; ok && Titles[parent] == step {
 			if u, ok := TitleUnlock(parent); ok {
 				s.Counters[u.Counter] = u.Threshold

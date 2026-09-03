@@ -152,7 +152,7 @@ func lineage(form string) []string {
 
 // nextMark is what the pet is working towards that is NOT xp: the mark its
 // trade opens, or - once it wears one - the title behind it, which asks for the
-// same habit TitleFactor times over.
+// same habit, a good deal more of it.
 //
 // It used to be hidden while there was still a level to climb, on the grounds
 // that one bar at a time is enough. That made the whole habit system invisible:

@@ -233,11 +233,48 @@ el propio Claude Code: aquello es suyo y no se puede tocar.
   Sin estilo puesto el payload **no manda un hueco, manda la palabra
   `"default"`** — `output_style: {name: outputStyle || "default"}`, leído del
   binario 2.1.259, no supuesto. Pintarla gastaría columnas en decir que no hay
-  nada puesto, así que se suprime. Los dos elementos siguen la misma regla —si no
-  dice nada, no sale— y por eso la banda **sigue pudiendo quedar vacía**: en la
-  raíz de un repo y sin estilo, que es la mayoría de las sesiones. Esa fila se
-  ancla con un **braille en blanco** (`U+2800`): sin él, Claude Code recorta los
-  espacios de la izquierda y el trozo de bicho de esa fila se cae al borde.
+  nada puesto, así que se suprime.
+
+  **Y el nombre se comprueba contra el disco antes de pintarlo**, que es la parte
+  que importa. El payload manda el nombre **configurado**, no el cargado: en el
+  CLI son dos pasos y solo llega el primero.
+
+  ```js
+  let d = Tn()?.outputStyle || "default"
+  return e[d] ?? null              // e = los estilos que cargaron
+  ...
+  output_style: { name: Xe }       // Xe = la config, en crudo
+  ```
+
+  O sea que una errata en `settings.json`, o un archivo borrado, se reportan
+  igual que un estilo que funciona **mientras el system prompt se queda vacío**.
+  Pintar ese nombre sería repetir la afirmación en vez de verificarla, así que la
+  banda lo busca ella: los cuatro estilos de fábrica (`Proactive`, `Concise`,
+  `Explanatory`, `Learning`) resuelven sin archivo; el resto tiene que aparecer en
+  `~/.claude/output-styles/` o en `.claude/output-styles/` del repo, con la regla
+  de nombre del propio CLI —el `name:` del frontmatter, y si no el nombre del
+  archivo sin `.md`, comparado **con mayúsculas y todo**, porque al otro lado es
+  una clave de objeto. Si no aparece, no se pinta.
+
+  Los estilos que trae un plugin se buscan **en flojo**: vale cualquier copia
+  instalada bajo `plugins/cache/`, sin averiguar qué versión está viva —eso es el
+  cargador de plugins entero, una vez por segundo—. Un falso positivo ahí solo
+  significa pintar un nombre que existe en algún sitio; esconder un estilo que
+  funciona sería peor. Cuesta 0,16 µs si es de fábrica, 5,9 µs si acierta en el
+  directorio de usuario y 28 µs en el barrido completo, sobre los 3,5 ms que tarda
+  la statusline entera.
+
+  Lo que **no** detecta: un estilo que resuelve pero que no está cargado *en esta
+  sesión*, porque la config cambió después de arrancarla. No hay rastro barato que
+  distinga eso — `/output-style` reescribe ese mismo ajuste y sí se aplica en
+  caliente, así que por fecha las dos situaciones son idénticas. Se arregla
+  reabriendo, y la banda no finge saberlo.
+
+  Los dos elementos siguen la misma regla —si no dice nada, no sale— y por eso la
+  banda **sigue pudiendo quedar vacía**: en la raíz de un repo y sin estilo, que es
+  la mayoría de las sesiones. Esa fila se ancla con un **braille en blanco**
+  (`U+2800`): sin él, Claude Code recorta los espacios de la izquierda y el trozo
+  de bicho de esa fila se cae al borde.
 El **modo de permisos** sale como marca, no como palabra: en bypass, un `⚡`
 rojo. Claude Code ya escribe «bypass permissions on (shift+tab to cycle)» en su
 propia línea bajo el prompt —y no hay ajuste que la oculte—, así que deletrearlo

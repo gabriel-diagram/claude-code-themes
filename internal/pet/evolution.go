@@ -106,32 +106,7 @@ var Unlocks = map[string]Unlock{
 
 // Titles are the level-6 forms, one per mark: "la forma final de cada rama".
 // Each asks for MORE of the same habit its mark asked for - a bloodhound that
-// reproduced ten bugs before fixing them becomes a wolf at twenty.
-//
-// The rule is ONE number: a title asks TWICE what its mark asked. That was not
-// the first attempt. The first was three times, and measuring what the counters
-// actually do in a day of normal use (4 green suites, 5 commits, 6 plan tasks)
-// showed what a flat multiplier does to counters that do not share a pace:
-//
-//	diff_streak         5   a day      bypass_turns       30   a day
-//	test_streak         4   a day      repro_before_fix    1   a day
-//	single_tool_tasks   2   a day      sessions_4h         0.4 a day
-//	same_repo_days      1   a day      ctx100_sessions     0.3 a day
-//	sessions_15min      0.5 a day      widest_commit       a record, not a rate
-//
-// Three times a counter that moves thirty times a day is three days; three
-// times one that moves twice a week is two months. The fourteen titles came out
-// spread from 3 days to 60.
-//
-// Doubling does not flatten that spread, and deliberately so: the spread is in
-// the MARKS, which are the canvas's own design - a gardener is two days and a
-// bolt is twenty. Doubling keeps each branch's character and only stops the
-// multiplier from exaggerating it. It also guarantees the thing three-times did
-// not: a title always asks strictly more than the mark under it, so the chain
-// can never invert. TestATitleNeverAsksLessThanItsMark holds the line.
-const TitleFactor = 2
-
-// Titles maps each mark to the title it opens.
+// reproduced ten bugs before fixing them becomes a wolf at thirty.
 var Titles = map[string]string{
 	"surgeon": "scalpel", "weaver": "loom", "monk": "abbot", "gardener": "forest",
 	"bloodhound": "wolf", "exterminator": "wasp", "cartographer": "atlas",
@@ -139,25 +114,60 @@ var Titles = map[string]string{
 	"mole": "worm", "gremlin": "devil", "kraken": "leviathan",
 }
 
-// TitleOverrides are the titles the doubling gets wrong, and why.
-var TitleOverrides = map[string]int{
-	// bypass_turns moves thirty times a day, so both the mark and twice it are
-	// over inside a day. The only counter where doubling is not enough.
-	"devil": 200,
+// TitleAsks is what each title asks of its mark's habit, straight off the
+// canvas "Cómo llegar a cada forma".
+//
+// These used to be one number - a title asked TWICE its mark - and that number
+// was invented here, not designed: the atlas carried the fourteen titles but no
+// condition for any of them, so a uniform multiplier was the least-wrong guess
+// available. The canvas has since spelled out a factor PER title, from x2.5 to
+// x5, which is strictly better information than any single multiplier: the
+// designer weighed each habit on its own.
+//
+// Two entries do not follow the canvas, and both for reasons the canvas could
+// not have known:
+//
+//   - atlas. The canvas asks for "5 planes de 10 tareas cerrados", which is a
+//     COUNT of big plans. longest_plan is a RecordMax - the largest single plan
+//     ever closed - so writing 50 here would ask for one plan of fifty tasks,
+//     which is not what was designed and is a different kind of quantity. The
+//     doubling stands until there is a counter that can express what the canvas
+//     means.
+//   - devil. The canvas says 100. bypass_turns moves about thirty times a day -
+//     measured, and this machine's own pet.json was already past 115 the day
+//     the canvas was read - so 100 is a title that arrives already earned, which
+//     is not a title. 200 puts it at about a week, in line with the rest.
+//
+// Everything else is the canvas's number.
+var TitleAsks = map[string]int{
+	"scalpel":   50,  // diff_streak, x2.5
+	"loom":      25,  // widest_commit, x2.5
+	"abbot":     15,  // sessions_under_40, x3
+	"forest":    7,   // docs_days, x3.5 - "una semana entera ordenando"
+	"wolf":      30,  // repro_before_fix, x3
+	"wasp":      50,  // test_streak, x3.3
+	"atlas":     20,  // longest_plan - see above, NOT the canvas's 50
+	"sphinx":    20,  // plans_before_code, x4
+	"storm":     30,  // sessions_15min, x3
+	"falcon":    25,  // single_tool_tasks, x3
+	"mammoth":   10,  // sessions_4h, x3.3
+	"worm":      20,  // same_repo_days, x4
+	"devil":     200, // bypass_turns - see above, NOT the canvas's 100
+	"leviathan": 10,  // ctx100_sessions, x3.3
 }
 
-// TitleUnlock is what the title behind a mark asks for: its counter, at twice
-// the threshold, unless the counter's pace makes that meaningless.
+// TitleUnlock is what the title behind a mark asks for: its mark's counter, at
+// the title's own threshold.
 func TitleUnlock(mark string) (Unlock, bool) {
 	base, ok := Unlocks[mark]
 	if !ok {
 		return Unlock{}, false
 	}
-	threshold := base.Threshold * TitleFactor
-	if over, ok := TitleOverrides[Titles[mark]]; ok {
-		threshold = over
+	asks, ok := TitleAsks[Titles[mark]]
+	if !ok {
+		return Unlock{}, false
 	}
-	return Unlock{base.Counter, threshold}, true
+	return Unlock{base.Counter, asks}, true
 }
 
 // Secrets are the two forms that do not come off the tree.

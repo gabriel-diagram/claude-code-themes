@@ -373,14 +373,14 @@ func TestEveryFormSitsOnTheRungItIsWornAt(t *testing.T) {
 // shape stays on its rung.
 func TestABrokenStreakNeverTakesTheShapeDownTheTree(t *testing.T) {
 	s := &State{XP: 1900, Counters: map[string]int{"inquisitive": 20, "tests": 20}}
-	s.Counters["test_streak"] = 30
+	s.Counters["test_streak"] = TitleAsks["wasp"]
 	form, _ := CurrentForm(s)
 	if form != "wasp" {
 		t.Fatalf("con la racha entera sale %s, se esperaba wasp", form)
 	}
 	RememberForm(s, form)
 
-	for _, streak := range []int{29, 15, 14, 1, 0} {
+	for _, streak := range []int{TitleAsks["wasp"] - 1, 15, 14, 1, 0} {
 		s.Counters["test_streak"] = streak
 		got, level := CurrentForm(s)
 		if Tier(got) < Tier("wasp") {
@@ -426,7 +426,7 @@ func TestTheFloorNeverBlocksTheWayUp(t *testing.T) {
 	RememberForm(s, form) // exterminator, rung 5
 
 	s.XP = 1900
-	s.Counters["test_streak"] = 30
+	s.Counters["test_streak"] = TitleAsks["wasp"]
 	if got, _ := CurrentForm(s); got != "wasp" {
 		t.Errorf("con el titulo ganado sale %s, se esperaba wasp", got)
 	}
@@ -705,7 +705,7 @@ func TestCloningAnEmptyStateIsSafe(t *testing.T) {
 func TestTheShapeHoldsWhileTheLevelIsStillAllowedToFall(t *testing.T) {
 	s := New()
 	s.XP = 1900
-	s.Counters = map[string]int{"inquisitive": 20, "tests": 20, "test_streak": 30}
+	s.Counters = map[string]int{"inquisitive": 20, "tests": 20, "test_streak": TitleAsks["wasp"]}
 	form, level := CurrentForm(s)
 	if form != "wasp" || level != 6 {
 		t.Fatalf("el punto de partida es %s nivel %d", form, level)
@@ -721,5 +721,78 @@ func TestTheShapeHoldsWhileTheLevelIsStillAllowedToFall(t *testing.T) {
 	}
 	if level != 5 {
 		t.Errorf("el nivel es %d; la XP cayo por debajo de 1900 y el nivel la sigue", level)
+	}
+}
+
+// The fourteen titles come off the canvas "Cómo llegar a cada forma", which
+// gives a factor per title rather than one multiplier for all of them. Before
+// that they were a uniform x2 invented here, because the atlas carried the
+// titles and no condition for any of them.
+//
+// Two entries deliberately disagree with the canvas, and this is where the
+// disagreement is written down rather than left to be rediscovered.
+func TestTheTitlesAreTheCanvasNumbers(t *testing.T) {
+	canvas := map[string]int{
+		"scalpel": 50, "loom": 25, "abbot": 15, "forest": 7,
+		"wolf": 30, "wasp": 50, "atlas": 50, "sphinx": 20,
+		"storm": 30, "falcon": 25, "mammoth": 10, "worm": 20,
+		"devil": 100, "leviathan": 10,
+	}
+	// atlas: the canvas asks for "5 planes de 10 tareas", a COUNT of big plans.
+	// longest_plan is the largest single plan ever closed, so 50 there would ask
+	// for one plan of fifty tasks - a different quantity, not a harder one.
+	// devil: bypass_turns moves ~30 a day, so the canvas's 100 is a title that
+	// arrives already earned.
+	ours := map[string]int{"atlas": 20, "devil": 200}
+
+	if len(TitleAsks) != len(canvas) {
+		t.Fatalf("hay %d titulos y el lienzo trae %d", len(TitleAsks), len(canvas))
+	}
+	for title, want := range canvas {
+		if mine, differs := ours[title]; differs {
+			want = mine
+		}
+		if got := TitleAsks[title]; got != want {
+			t.Errorf("%s pide %d, se esperaba %d", title, got, want)
+		}
+	}
+}
+
+// Whatever the numbers are, the chain can never invert: a title always asks
+// strictly more of the habit than the mark under it.
+func TestATitleAlwaysAsksMoreThanItsMark(t *testing.T) {
+	for mark, title := range Titles {
+		base, ok := Unlocks[mark]
+		if !ok {
+			t.Fatalf("%s no es una marca", mark)
+		}
+		u, ok := TitleUnlock(mark)
+		if !ok {
+			t.Fatalf("%s no tiene umbral", title)
+		}
+		if u.Counter != base.Counter {
+			t.Errorf("%s lee %s y su marca %s", title, u.Counter, base.Counter)
+		}
+		if u.Threshold <= base.Threshold {
+			t.Errorf("%s pide %d y %s ya pedia %d", title, u.Threshold, mark, base.Threshold)
+		}
+	}
+}
+
+// And every title has an entry: a missing one used to fall back to a
+// multiplication and would now silently make the title unreachable.
+func TestEveryTitleHasAThreshold(t *testing.T) {
+	for mark, title := range Titles {
+		if _, ok := TitleAsks[title]; !ok {
+			t.Errorf("%s (detras de %s) no tiene umbral", title, mark)
+		}
+		if _, ok := TitleUnlock(mark); !ok {
+			t.Errorf("TitleUnlock(%s) no devuelve nada", mark)
+		}
+	}
+	for title := range TitleAsks {
+		if !titleForms[title] {
+			t.Errorf("TitleAsks trae %q, que no es un titulo", title)
+		}
 	}
 }

@@ -123,7 +123,7 @@ func TestTheRungIsWrittenToTheFile(t *testing.T) {
 	path := t.TempDir() + "/pet.json"
 	s := pet.New()
 	s.XP = 1900
-	s.Counters = map[string]int{"inquisitive": 20, "tests": 20, "test_streak": 30}
+	s.Counters = map[string]int{"inquisitive": 20, "tests": 20, "test_streak": pet.TitleAsks["wasp"]}
 	pet.Save(s, path)
 
 	form, _ := pet.CurrentForm(pet.Load(path))
@@ -220,7 +220,7 @@ func TestAFallenWalkNeverLowersTheStoredRung(t *testing.T) {
 	path := t.TempDir() + "/pet.json"
 	s := pet.New()
 	s.XP = 1900
-	s.Counters = map[string]int{"inquisitive": 20, "tests": 20, "test_streak": 30}
+	s.Counters = map[string]int{"inquisitive": 20, "tests": 20, "test_streak": pet.TitleAsks["wasp"]}
 	pet.Save(s, path)
 	if got := pet.Load(path).FormSeen; got != "wasp" {
 		t.Fatalf("el punto de partida es %q, se esperaba wasp", got)

@@ -429,11 +429,15 @@ func TestTheStyleIsPaintedAsASetting(t *testing.T) {
 }
 
 func TestTheStyleComesOffThePayload(t *testing.T) {
+	// Parse now checks the name against disk, so the test brings its own
+	// config dir instead of leaning on whatever this machine happens to have.
+	t.Setenv("CLAUDE_CONFIG_DIR", writeStyle(t, "criterio.md", "Criterio"))
 	for _, tc := range []struct {
 		raw  string
 		want string
 	}{
 		{`{"output_style":{"name":"Criterio"}}`, "Criterio"},
+		{`{"output_style":{"name":"Nolotengo"}}`, ""},
 		{`{"output_style":{"name":"default"}}`, ""},
 		{`{}`, ""},
 		{`{"output_style":{}}`, ""},
