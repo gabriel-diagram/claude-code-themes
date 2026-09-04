@@ -468,7 +468,11 @@ func TestTheStyleSpeaksInTheFootersVoice(t *testing.T) {
 	if !strings.Contains(line, "Internal") {
 		t.Errorf("the folder was lowercased too: %q", line)
 	}
-	// And Payload keeps the real name; only the band shrinks it.
+	// And Payload keeps the real name; only the band shrinks it. Parse drops a
+	// style it cannot find on disk (see payload.go), so the name has to resolve
+	// against a config dir this test owns - not against whatever the machine
+	// running it happens to have installed.
+	t.Setenv("CLAUDE_CONFIG_DIR", writeStyle(t, "criterio.md", "Criterio"))
 	if got := Parse(map[string]any{
 		"output_style": map[string]any{"name": "Criterio"},
 	}).Style; got != "Criterio" {
