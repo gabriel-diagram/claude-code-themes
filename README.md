@@ -356,6 +356,34 @@ Reventarlo del todo solo cuesta xp.
 secretas fuera del árbol: `fénix` y `quimera`. El nivel 4 no bifurca — es el
 oficio otra vez, con más xp.
 
+#### Cómo se lee una forma
+
+Cada fila es una forma dibujada en los siete estados. **La marca de arriba y el
+número de patas identifican la forma y no cambian nunca**; el estado rellena los
+ojos, mueve el paso, aplana el cuerpo a partir de *cansada*, lo tumba en *k.o.*
+sin perder la cuenta de patas, y baja el color por la rampa de esa rama — los
+siete pasos que se ven arriba a la derecha de cada fila.
+
+![Nivel 1: chispa, la forma con la que nace](assets/formas-nivel-1.png)
+
+*Nivel 1 — `chispa`: sin oficio y sin rampa propia.*
+
+![Nivel 2: los tres temperamentos](assets/formas-nivel-2.png)
+
+*Nivel 2 — tres maneras de trabajar, tres cuerpos base: `pauta` (cuadriculado),
+`sonda` (antena con sensor) y `brasa` (ancho, inclinado).*
+
+![Nivel 3: los siete oficios, primera parte](assets/formas-nivel-3a.png)
+![Nivel 3: los siete oficios, segunda parte](assets/formas-nivel-3b.png)
+
+*Nivel 3 — los siete oficios, cada uno con su rampa de siete pasos. De `pauta`
+salen `refactor` y `pulcro`; de `sonda`, `cazabugs` y `arquitecto`; de `brasa`,
+`velocista`, `maratón` y `salvaje`.*
+
+Las marcas del nivel 5 y los títulos del nivel 6 heredan la rampa de su oficio:
+un sabueso es azul igual que el cazabugs del que sale, y lo que los distingue es
+el cuerpo. Por eso diez rampas bastan para 41 formas.
+
 <details>
 <summary><b>Las 41 siluetas</b> (la fila del cuerpo, que es la que distingue)</summary>
 
