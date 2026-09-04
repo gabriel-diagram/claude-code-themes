@@ -250,7 +250,30 @@ func showPanel(out io.Writer, statePath string, now time.Time) int {
 	// Out of levels is not out of tree. The canvas: "las ramificaciones no
 	// dependen de la XP sino del hábito" - so at the top the row that still
 	// moves is the habit, and it says which mark it opens.
-	if mark, ok := nextMark(s, form); ok {
+	// The XP row. The vertical bar beside the sprite says "how far along" and
+	// not "how far to go", and the number under it is the total - so the one
+	// thing missing was the target, which is the only half you can act on.
+	// The bar measures the STRETCH - how far into level 4 you are - and the
+	// number beside it is the TOTAL, because that is the one the sprite's
+	// column already showed and the one a person carries in their head. The
+	// two disagree on purpose: 118 of 1600 is the progress, 518 of 2000 is
+	// the position, and printing the stretch as "118/1600" next to a big
+	// "518 xp" read as a third, unrelated number.
+	if done, span, climbing := pet.LevelProgress(s.XP); climbing {
+		if next, ok := pet.NextThreshold(s.XP); ok {
+			nl("  " + dim + "nivel  " + reset +
+				theme.Bar(float64(done), float64(span), 16, theme.Ident, theme.CtxEmpty) +
+				"  " + emph + strconv.Itoa(s.XP) + reset + dim + "/" +
+				strconv.Itoa(next) + " xp" + reset)
+		}
+	}
+
+	// The habit bar belongs here only when there is no fork section to carry
+	// it - a pet wearing its mark, climbing towards a title. While the fork
+	// is still open, "la marca del nivel 5" below says the same thing with
+	// both runners in it, and this row said it once with the number capped:
+	// "10/10" beside the section's "33/10" is the same habit twice, disagreeing.
+	if mark, ok := nextMark(s, form); ok && len(pet.Siblings(s, form)) < 2 {
 		nl("  " + dim + "marca  " + reset +
 			theme.Bar(float64(mark.Done), float64(mark.Threshold), 16,
 				theme.Number, theme.CtxEmpty) +
@@ -314,13 +337,17 @@ func showPanel(out io.Writer, statePath string, now time.Time) int {
 		nl("  " + strings.Join(parts, " "+theme.Fg(theme.Rule)+"│"+reset+" "))
 	}
 
+	theFork(&b, s, form)
+	counters(&b, s)
+	larder(&b, s, now)
+
+	// The whole log, not the last eight of today. It is capped at LogMax and
+	// cleared daily, so "everything" is at most one day and forty meals - and
+	// the eight-line window hid the morning by lunchtime.
 	if len(s.Log) > 0 && s.LogDay == pet.Today(now) {
 		nl("")
 		nl("  " + dim + "hoy" + reset)
 		entries := s.Log
-		if len(entries) > 8 {
-			entries = entries[len(entries)-8:]
-		}
 		// Both columns are measured against what the day actually holds
 		// instead of a fixed width. Most meals carry no note at all -
 		// a green suite has nothing to say - and a hardcoded %-22s spent

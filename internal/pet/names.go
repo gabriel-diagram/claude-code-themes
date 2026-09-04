@@ -58,3 +58,49 @@ func Name(id string) string {
 	}
 	return id
 }
+
+// CounterNames is what a person reads for a behaviour counter.
+//
+// Twenty-two numbers decide the whole tree and the panel showed exactly one of
+// them - the habit of the mark in progress. The rest moved in silence, so
+// there was no way to find out what a mark asks for short of reading the
+// source. These are the labels the panel prints; the English keys stay the ids
+// pet.json stores, for the same reason the form names do.
+var CounterNames = map[string]string{
+	// The three temperaments already have a name as forms, and mean the same
+	// thing as counters, so they are not repeated here - Name falls through.
+
+	// What the level 3 fork reads.
+	"diffs":          "diffs limpios",
+	"ctx_low":        "sesiones con contexto bajo",
+	"tests":          "suites en verde",
+	"plans":          "planes cerrados",
+	"short_sessions": "sesiones cortas",
+	"long_sessions":  "sesiones largas",
+	"ctx_maxed":      "sesiones al límite",
+
+	// What the fourteen marks ask for.
+	"diff_streak":       "días seguidos con diff limpio",
+	"widest_commit":     "commit más ancho",
+	"sessions_under_40": "sesiones bajo el 40%",
+	"docs_days":         "días seguidos tocando docs",
+	"repro_before_fix":  "reproducir antes de arreglar",
+	"test_streak":       "días seguidos en verde",
+	"longest_plan":      "plan más largo cerrado",
+	"plans_before_code": "planes antes de tocar código",
+	"sessions_15min":    "sesiones de menos de 15m",
+	"single_tool_tasks": "tareas de una sola herramienta",
+	"sessions_4h":       "sesiones de 4h o más",
+	"same_repo_days":    "días seguidos en el mismo repo",
+	"bypass_turns":      "turnos en bypass",
+	"ctx100_sessions":   "veces con el contexto al 100%",
+}
+
+// CounterName is CounterNames with the form names as a fallback, so the three
+// temperaments read the same whether they are a shape or a habit.
+func CounterName(counter string) string {
+	if name, ok := CounterNames[counter]; ok {
+		return name
+	}
+	return Name(counter)
+}

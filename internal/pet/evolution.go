@@ -551,3 +551,43 @@ func MarkParent(form string) (string, bool) {
 	parent, ok := Parent[form]
 	return parent, ok
 }
+
+// Sibling is one of the marks a trade can turn into, and how close the pet is.
+type Sibling struct {
+	Form      string
+	Counter   string
+	Done      int
+	Threshold int
+}
+
+// Reached says the habit is already paid for; only the XP is left.
+func (s Sibling) Reached() bool { return s.Done >= s.Threshold }
+
+// Siblings are the marks that compete for the level 5 fork, in the order the
+// tree lists them, whichever one is currently ahead.
+//
+// The panel used to show only the leader, which is the one thing that cannot
+// be read as a race: 33 of 10 against 1 of 15 says the fork is settled, and
+// "sabueso 33/10" on its own says nothing about the alternative it beat.
+//
+// form is the trade being asked about. A mark or a title has no fork left and
+// gets nothing.
+func Siblings(s *State, form string) []Sibling {
+	children, ok := Tree[form]
+	if !ok {
+		return nil
+	}
+	out := make([]Sibling, 0, len(children))
+	for _, child := range children {
+		u, ok := Unlocks[child]
+		if !ok {
+			return nil // not a level 5 fork: these children are not marks
+		}
+		done := s.Counters[u.Counter]
+		if done < 0 {
+			done = 0
+		}
+		out = append(out, Sibling{child, u.Counter, done, u.Threshold})
+	}
+	return out
+}
