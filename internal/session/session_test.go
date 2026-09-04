@@ -49,7 +49,9 @@ func TestV1KeysAreStillRead(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "facts")
 	os.WriteFile(path, []byte(`{"etq":"tired","pico":42.5,"t0":1788000000,"api":90000,"pid":"p1","tps_t":5}`), 0o600)
 	f := Load(path)
-	if f.Label != "tired" || f.Peak != 42.5 || f.T0 != 1788000000 || f.PromptID != "p1" {
+	// `pico` was the context peak, and it still is: back then there was only
+	// one peak and it was the window's.
+	if f.Label != "tired" || f.CtxPeak != 42.5 || f.T0 != 1788000000 || f.PromptID != "p1" {
 		t.Errorf("v1 facts = %+v", f)
 	}
 	if f.APIMs == nil || *f.APIMs != 90000 || f.TPSAt != 5 {
@@ -74,13 +76,13 @@ func TestABareLabelIsNotStructured(t *testing.T) {
 func TestRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "facts")
 	api, tps := 90000.0, 42.5
-	want := Facts{Label: "easy", Peak: 61.5, T0: 1788000000, Repo: "r",
+	want := Facts{Label: "easy", CtxPeak: 61.5, T0: 1788000000, Repo: "r",
 		PromptID: "p", APIMs: &api, TPS: &tps, TPSAt: 9}
 	if !Save(path, want) {
 		t.Fatal("save failed")
 	}
 	got := Load(path)
-	if got.Label != want.Label || got.Peak != want.Peak || got.T0 != want.T0 ||
+	if got.Label != want.Label || got.CtxPeak != want.CtxPeak || got.T0 != want.T0 ||
 		got.Repo != want.Repo || got.PromptID != want.PromptID ||
 		got.APIMs == nil || *got.APIMs != api || got.TPS == nil || *got.TPS != tps {
 		t.Errorf("round trip = %+v", got)

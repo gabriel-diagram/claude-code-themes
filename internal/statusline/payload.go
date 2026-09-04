@@ -1,17 +1,16 @@
 package statusline
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
+
+	"github.com/gabriel-diagram/claude-code-themes/internal/theme"
 )
 
 // Everything we know about the session, read out of the JSON on stdin.
@@ -92,9 +91,12 @@ func asFloat(v any) *float64 {
 	return &f
 }
 
+// asStr is the only door text from the payload comes through, so the
+// flattening lives here: see theme.OneLine for why a newline in a name is a
+// broken statusline and not just an ugly one.
 func asStr(v any) string {
 	if s, ok := v.(string); ok {
-		return s
+		return theme.OneLine(s)
 	}
 	return ""
 }
@@ -182,50 +184,6 @@ func repoRoot(dir string) string {
 	return ""
 }
 
-// gitStatus returns (branch, dirty). One process for both: `--branch` puts the
-// head on the first line and the working-tree entries after it, so the two
-// calls the Python made collapse into one. Git is optional: without it we
-// degrade rather than fail.
-func gitStatus(dir string) (string, bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "--no-optional-locks", "-C", dir,
-		"status", "--porcelain=v1", "--branch")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", false
-	}
-	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
-	if len(lines) == 0 || !strings.HasPrefix(lines[0], "## ") {
-		return "", false
-	}
-	// Three shapes come out of --branch, and only the first one carries an
-	// upstream: "main...origin/main", "HEAD (no branch)" when detached, and
-	// "No commits yet on main" in a repo with nothing committed. The last one
-	// used to fall through and land in the band verbatim, so a fresh repo said
-	// "(No commits yet on main)" where the branch goes. The porcelain format is
-	// not localised, so the sentence is safe to match on.
-	head := strings.TrimPrefix(lines[0], "## ")
-	switch {
-	case head == "HEAD (no branch)":
-		head = "HEAD"
-	case strings.HasPrefix(head, "No commits yet on "):
-		head = strings.TrimPrefix(head, "No commits yet on ")
-	default:
-		if i := strings.Index(head, "..."); i >= 0 {
-			head = head[:i]
-		}
-	}
-	dirty := false
-	for _, line := range lines[1:] {
-		if strings.TrimSpace(line) != "" {
-			dirty = true
-			break
-		}
-	}
-	return head, dirty
-}
-
 // Parse turns the raw payload into everything the bands need.
 func Parse(doc map[string]any) *Payload {
 	p := &Payload{}
@@ -285,7 +243,10 @@ func Parse(doc map[string]any) *Payload {
 
 	if root := repoRoot(p.Cwd); root != "" {
 		p.Root = root
-		p.Branch, p.Dirty = gitStatus(p.Cwd)
+		// The branch is read from .git/HEAD - no fork. The dirty flag is the
+		// expensive half and is worked out in Run, where the cache lives.
+		// See gitinfo.go.
+		p.Branch = branchOf(root)
 		if p.Repo == "" {
 			trimmed := strings.TrimRight(root, "/")
 			bits := strings.Split(trimmed, "/")

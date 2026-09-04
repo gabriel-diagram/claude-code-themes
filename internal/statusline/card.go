@@ -49,6 +49,23 @@ type Card struct {
 	Done, Span int
 	Mark       string
 
+	// Toward is the mark the pet is HEADING for, in the canvas's Spanish, and
+	// it shows while the mark is still out of reach - which is most of the
+	// life of a pet, and used to be the stretch that said nothing at all.
+	//
+	// The tree only forks at levels 2, 3 and 5, so a pet at level 4 reads
+	// "cazabugs nivel 4" for the whole climb with no hint of which of the two
+	// marks it is earning. The habit that decides it has been moving the whole
+	// time; only the screen was quiet. Band 4 prints it in brackets right
+	// after the form: `cazabugs[sabueso]`.
+	//
+	// It is a FORECAST and says so by being a bracket rather than a name: the
+	// counters keep moving, a sibling can overtake, and a secret cancels the
+	// branch outright. Empty when nothing is under way - a pet with both
+	// habits still at zero is not heading anywhere yet - and empty for a title,
+	// which has nothing beyond it.
+	Toward string
+
 	// LevelledUp says the bubble, if there is one, is the level announcement,
 	// so Spoke knows to move LevelSeen along with it.
 	LevelledUp bool
@@ -64,25 +81,24 @@ type Card struct {
 // book applies the side effects on pet.json. A failure here must never take the
 // statusline down with it, so every step is best-effort.
 func book(p *Payload, previousLabel, label string, newTurn bool, statePath string, now time.Time) {
-	var s *pet.State
-
-	if label == "k.o." && previousLabel != "" && previousLabel != "k.o." {
-		s = pet.Load(statePath)
-		if !pet.Feed(s, "overflow", "", now) {
-			s = nil
+	blown := label == "k.o." && previousLabel != "" && previousLabel != "k.o."
+	bypass := newTurn && p.Permissions == "bypass"
+	if !blown && !bypass {
+		return
+	}
+	pet.Update(statePath, func(s *pet.State) bool {
+		write := false
+		if blown {
+			// ctx100_sessions is NOT touched here: `pet session` counts it on
+			// close, which is once per session.
+			write = pet.Feed(s, "overflow", "", now)
 		}
-		// ctx100_sessions is NOT touched here: `pet session` counts it on
-		// close, which is once per session.
-	}
-	if newTurn && p.Permissions == "bypass" {
-		if s == nil {
-			s = pet.Load(statePath)
+		if bypass {
+			s.Bump("bypass_turns", 1)
+			write = true
 		}
-		s.Bump("bypass_turns", 1)
-	}
-	if s != nil {
-		pet.Save(s, statePath)
-	}
+		return write
+	})
 }
 
 // eventFor is the "primero el evento" half of the canvas's rule: what, if
@@ -106,7 +122,7 @@ func eventFor(s *pet.State, label string, levelledUp, bigMeal bool) pet.Event {
 // RenderCard builds the right-hand column and whatever the pet has to say.
 func RenderCard(p *Payload, facts session.Facts, rate rateFacts, newTurn, bubbleAllowed bool,
 	statePath string, now time.Time) (Card, *pet.State) {
-	usage := pet.Bottleneck(p.ContextPc, p.FiveHour, p.SevenDay)
+	usage := pet.ContextLoad(p.ContextPc)
 	vital := pet.StateFor(usage)
 	label := vital.Label
 
@@ -123,18 +139,16 @@ func RenderCard(p *Payload, facts session.Facts, rate rateFacts, newTurn, bubble
 	// Crossing a threshold makes the label bold for one refresh.
 	jumped := previousLabel != "" && previousLabel != label
 
-	peak := facts.Peak
-	if usage > peak {
-		peak = usage
-	}
-	// The context's own peak is tracked apart from the neck's: see Facts.
+	// One peak, because there is one number: the state and the context are the
+	// same reading now. There were two while the state read the tightest of
+	// the three necks - the neck's peak for the state, the context's own for
+	// the counters named after it - and the second outlived the first.
 	ctxPeak := facts.CtxPeak
-	if p.ContextPc != nil && *p.ContextPc > ctxPeak {
-		ctxPeak = *p.ContextPc
+	if usage > ctxPeak {
+		ctxPeak = usage
 	}
 
 	changed := previousLabel != label ||
-		peak >= facts.Peak+1.0 ||
 		ctxPeak >= facts.CtxPeak+1.0 ||
 		newTurn ||
 		(p.APIMs != nil && (facts.APIMs == nil || *p.APIMs != *facts.APIMs))
@@ -152,7 +166,6 @@ func RenderCard(p *Payload, facts session.Facts, rate rateFacts, newTurn, bubble
 		}
 		out.Facts = &session.Facts{
 			Label:    label,
-			Peak:     roundTo1(peak),
 			CtxPeak:  roundTo1(ctxPeak),
 			T0:       t0,
 			Repo:     p.Repo,
@@ -180,9 +193,17 @@ func RenderCard(p *Payload, facts session.Facts, rate rateFacts, newTurn, bubble
 	// While there is a level above, the bar is XP. At the top it swaps to the
 	// habit that opens the next mark, which is the only progress left; a pet
 	// already wearing its mark has neither, and band 4 leans on the state.
+	// Asked once, read twice: the mark the pet is heading for names the
+	// bracket always, and becomes the bar itself once there is no level left
+	// to open. NextMark takes the form we have already walked, so this costs
+	// no second walk down the tree.
+	mark, heading := pet.NextMark(s, form)
+	if heading && mark.Share() > 0 {
+		out.Toward = pet.Name(mark.Form)
+	}
 	if done, span, ok := pet.LevelProgress(s.XP); ok {
 		out.Done, out.Span = done, span
-	} else if mark, ok := pet.NextMark(s, form); ok {
+	} else if heading {
 		out.Done, out.Span, out.Mark = mark.Done, mark.Threshold, pet.Name(mark.Form)
 	}
 
@@ -229,7 +250,10 @@ func RememberShape(c Card, s *pet.State, statePath string) {
 	// it is handed, so that no path can persist a pet and forget. All this has
 	// to decide is WHEN a save is worth doing, which is why it does not set the
 	// field itself: two writers for one field is how they end up disagreeing.
-	pet.Save(pet.Load(statePath), statePath)
+	//
+	// Update re-reads under the lock, which is the same re-read this always
+	// did, now with nothing able to slip in between the read and the write.
+	pet.Update(statePath, func(*pet.State) bool { return true })
 }
 
 // Spoke books a bubble that reached the screen: the phrase goes into the
@@ -243,12 +267,13 @@ func Spoke(c Card, s *pet.State, statePath string, now time.Time) {
 		return
 	}
 	pet.Remember(s, c.Bubble, now)
-	fresh := pet.Load(statePath)
-	fresh.Said, fresh.SaidAt = s.Said, s.SaidAt
-	if c.LevelledUp {
-		fresh.LevelSeen = c.Level
-	}
-	pet.Save(fresh, statePath)
+	pet.Update(statePath, func(fresh *pet.State) bool {
+		fresh.Said, fresh.SaidAt = s.Said, s.SaidAt
+		if c.LevelledUp {
+			fresh.LevelSeen = c.Level
+		}
+		return true
+	})
 }
 
 func roundTo1(f float64) float64 {

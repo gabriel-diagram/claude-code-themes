@@ -338,11 +338,18 @@ func Load(path string) *State {
 	return s
 }
 
-// Save writes atomically: a temp file in the same directory, then a rename.
+// Save writes a state to disk atomically - temp file in the same directory,
+// then rename - and WITHOUT taking the lock.
 //
-// Several sessions share this file. The rename is atomic on POSIX, so nobody
-// ever reads half a json; what CAN be lost is a concurrent write, which is why
-// Feed does read-modify-write in one piece.
+// It is not the way to change the pet. Load, mutate, Save is the shape that
+// LOSES UPDATES: several sessions share this file, and because Save writes the
+// whole State, the loser of a race does not merely lose its own increment, it
+// puts back everything it read. Measured: 100 meals fed concurrently landed as
+// 72 XP instead of 800. pet.Update is the replacement, and lock_test.go fails
+// if production code calls this directly.
+//
+// The rename keeps its own promise regardless: nobody ever reads half a json.
+// That was always true, and it was never the same thing as not losing writes.
 func Save(s *State, path string) bool {
 	// The rung, before anything else, because it is not decoration: it is a
 	// field that has to agree with the state being written, exactly like the

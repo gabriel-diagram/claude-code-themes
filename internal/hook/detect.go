@@ -55,6 +55,32 @@ const Red = `\bFAILED\b|\bFAILURES\b|\bfailures?[:=]\s*[1-9]|\berrors?[:=]\s*[1-
 	`\b[1-9]\d*\s+(?:failed|failing|errors?)\b|\bpanic:|` +
 	`\bTests?\s+failed\b|\bFAIL\b`
 
+// Zero is a summary NAMING failures to say there were none, which is how most
+// runners announce success. It is blanked out before Red is looked for.
+//
+// Without this, `\bFAILED\b` and `\bFAILURES\b` - case-insensitive, and with
+// no number required - matched the word on its own, so eight of the fifteen
+// runners checked read their own green summary as a failure:
+//
+//	cargo test   test result: ok. 10 passed; 0 failed; 0 ignored
+//	rspec        10 examples, 0 failures
+//	dotnet test  Passed!  - Failed:     0, Passed:    10
+//	maven        Tests run: 10, Failures: 0, Errors: 0, Skipped: 0
+//	ctest        100% tests passed, 0 tests failed out of 10
+//	swift        Executed 10 tests, with 0 failures (0 unexpected)
+//	elixir       10 tests, 0 failures
+//	junit        [          0 tests failed         ]
+//
+// The cost was not only the missed meal. A red is REMEMBERED - it is what
+// bloodhound's repro-before-fix reads - so a suite that could never come out
+// green left the flag set for ever, and the habit it feeds was unreachable
+// along with the whole branch behind it.
+//
+// Go's regexp is RE2 and has no lookbehind, so the zero cannot be excluded
+// inside Red itself. Blanking first is the same thing in two steps.
+const Zero = `\b0\s+(?:tests?\s+)?(?:failed|failing|failures?|errors?)\b|` +
+	`\b(?:failed|failing|failures?|errors?)\s*[:=]\s*0+\b`
+
 // RedTailLines is how much of the output counts as "the summary".
 const RedTailLines = 12
 
@@ -78,6 +104,7 @@ var (
 	filesRe      = regexp.MustCompile(FilesChanged)
 	hashRe       = regexp.MustCompile(CommitHash)
 	redRe        = regexp.MustCompile(`(?i)` + Red)
+	zeroRe       = regexp.MustCompile(`(?i)` + Zero)
 	scriptExtRe  = regexp.MustCompile(`\.(sh|bash|zsh|py|rb|js|ts|pl)$`)
 	testWordRe   = regexp.MustCompile(`test|spec`)
 	builtinRe    = regexp.MustCompile(`(?i)^(?:` + Runners + `)`)
@@ -216,7 +243,12 @@ func TestsAreRed(output string, failed bool) bool {
 	if len(lines) > RedTailLines {
 		lines = lines[len(lines)-RedTailLines:]
 	}
-	return redRe.MatchString(strings.Join(lines, "\n"))
+	// "0 failures" is not a failure. Blanked BEFORE the search rather than
+	// excluded from Red, because RE2 has no lookbehind - and blanked one by
+	// one rather than all-or-nothing, so "Failures: 2, Errors: 0" keeps the
+	// half that is genuinely red.
+	tail := zeroRe.ReplaceAllString(strings.Join(lines, "\n"), " ")
+	return redRe.MatchString(tail)
 }
 
 // docSuffixes and IsDocsCommit: the commit is already made, so git is asked

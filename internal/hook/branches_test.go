@@ -246,14 +246,18 @@ func TestALongSessionAtTheLimitStillGoesToMarathon(t *testing.T) {
 // hands back the counters. A ctxPeak below zero leaves ctx_peak out of the
 // file entirely, which is what a session written before the two were told
 // apart looks like.
-func closeWith(t *testing.T, peak, ctxPeak float64) map[string]int {
+// closeWith runs a session end over a facts file. quotaPeak is written as the
+// legacy `peak` key - the neck peak the counters used to read - and a ctxPeak
+// below zero leaves the file without a `ctx_peak` at all, which is what a file
+// written before the two were told apart looks like.
+func closeWith(t *testing.T, quotaPeak, ctxPeak float64) map[string]int {
 	t.Helper()
 	statePath := filepath.Join(t.TempDir(), "pet.json")
 	pet.Save(pet.New(), statePath)
 	at := time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC)
 
 	doc := map[string]any{
-		"label": "x", "peak": peak, "t0": at.Unix(), "repo": "r", "structured": true}
+		"label": "x", "peak": quotaPeak, "t0": at.Unix(), "repo": "r", "structured": true}
 	if ctxPeak >= 0 {
 		doc["ctx_peak"] = ctxPeak
 	}
@@ -266,22 +270,24 @@ func closeWith(t *testing.T, peak, ctxPeak float64) map[string]int {
 	return pet.Load(statePath).Counters
 }
 
-func TestTheContextCountersReadTheContextAndNotTheNeck(t *testing.T) {
-	// Peak is the tightest of the three consumptions now. Three counters are
-	// named for the context and mean it, so they read its own peak: otherwise
-	// a session that never filled the window and merely ran out of 5h quota
-	// would be credited with "touching 100% of context".
-	c := closeWith(t, 100, 15) // the neck is a quota; the window stayed empty
+func TestNoCounterIsPaidOutOfAQuota(t *testing.T) {
+	// All five counters here are named for the context and mean it. Three of
+	// them always read it. The other two - impulsive and ctx_maxed, the whole
+	// of the ember branch - used to read the tightest of the three necks on
+	// purpose, on the argument that a squeezed quota is also "working at the
+	// limit". It is not the same thing: the quotas are the ACCOUNT's, so
+	// running four sessions in parallel spends them without any one window
+	// ever filling, and the branch that means "you push without easing off"
+	// was payable by opening tabs.
+	c := closeWith(t, 100, 15) // a quota at the ceiling; the window stayed empty
 	if c["ctx100_sessions"] != 0 {
 		t.Error("a quota at 100 was counted as a full context window")
 	}
 	if c["ctx_low"] != 1 || c["sessions_under_40"] != 1 {
 		t.Errorf("a context that peaked at 15 did not read as low: %v", c)
 	}
-	// ...while the two that mean "you worked at the limit" read the neck, and
-	// a squeezed quota is working at the limit.
-	if c["impulsive"] != 1 || c["ctx_maxed"] != 1 {
-		t.Errorf("the neck at 100 fed nothing to the ember branch: %v", c)
+	if c["impulsive"] != 0 || c["ctx_maxed"] != 0 {
+		t.Errorf("a quota paid into the ember branch: %v", c)
 	}
 }
 

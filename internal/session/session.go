@@ -23,14 +23,17 @@ const MaxAge = 24 * time.Hour
 
 // Facts is what the statusline carries from one refresh to the next.
 type Facts struct {
-	Label string  `json:"label"`
-	Peak  float64 `json:"peak"`
+	Label string `json:"label"`
 
-	// CtxPeak is the context's OWN peak, kept apart from Peak now that Peak is
-	// the tightest of the three necks. Half the counters are named for context
-	// and mean it - ctx_low, sessions_under_40, ctx100_sessions - and reading
-	// them off the neck would credit "3 sessions touching 100% of context" to
-	// somebody who never filled the window and only ran out of 5h quota.
+	// CtxPeak is the highest the context window got. It is the ONE peak, which
+	// it has not always been: while the state read the tightest of the three
+	// necks there was a `peak` beside it carrying that, and the counters named
+	// for the context - ctx_low, sessions_under_40, ctx100_sessions, and the
+	// two ember rungs in the hook - had to be careful to read this one, or they
+	// would credit "3 sessions touching 100% of context" to somebody who never
+	// filled the window and only ran out of 5h quota. Two of them were not
+	// careful. The state is the context again, so there is nothing to be
+	// careful about: see pet.ContextLoad.
 	CtxPeak float64 `json:"ctx_peak"`
 
 	T0       int64    `json:"t0"`
@@ -44,6 +47,16 @@ type Facts struct {
 	// only a bare label is one this version knows nothing about, and closing a
 	// session on it would hand out counters for free.
 	Structured bool `json:"-"`
+}
+
+// asFloat reads a number out of the raw document. It exists for the legacy
+// `peak` key, which no longer has a field of its own to unmarshal into.
+func asFloat(v any) *float64 {
+	f, ok := v.(float64)
+	if !ok || f != f {
+		return nil
+	}
+	return &f
 }
 
 // SafeID whitelists a session id, because it becomes part of a path.
@@ -130,18 +143,29 @@ func Load(path string) Facts {
 	_, hasPeak := doc["peak"]
 	_, hasT0 := doc["t0"]
 	f.Structured = hasPeak || hasT0
-	// A file written before the two peaks were told apart has only the one.
-	// Falling back keeps a session that spans an upgrade from reading as a
-	// context that never rose above zero, which would hand out ctx_low and
-	// sessions_under_40 for free.
+	// A file older than the split between the two peaks carries only `peak`,
+	// and back then `peak` WAS the context. Falling back to it keeps a session
+	// that spans an upgrade from reading as a context that never rose above
+	// zero, which would hand out ctx_low and sessions_under_40 for free. A file
+	// from the neck versions carries both, and its `ctx_peak` is the right one
+	// to take, which is exactly what this does.
 	if _, has := doc["ctx_peak"]; !has {
-		f.CtxPeak = f.Peak
+		if v := asFloat(doc["peak"]); v != nil {
+			f.CtxPeak = *v
+		}
 	}
 	return f
 }
 
 // Save writes the facts. A failure is not worth reporting: the next refresh
 // will try again.
+//
+// Temp file then rename, the way pet.Save has always done it, and not the bare
+// os.WriteFile this used to be. These files live in $TMPDIR, which on a shared
+// box is a directory other people can write to: a plain WriteFile FOLLOWS a
+// symlink planted at the path and truncates whatever is on the far end. The
+// name has a session UUID in it so nobody is guessing it, but a writer that
+// cannot be aimed elsewhere costs three lines and settles the question.
 func Save(path string, f Facts) bool {
 	if path == "" {
 		return false
@@ -150,10 +174,44 @@ func Save(path string, f Facts) bool {
 	if err != nil {
 		return false
 	}
-	return os.WriteFile(path, raw, 0o600) == nil
+	return WriteAtomic(path, raw)
+}
+
+// WriteAtomic puts bytes at path without ever writing THROUGH what is already
+// there. O_EXCL on the temp file means it is ours or it does not exist, and the
+// rename replaces the destination whatever it was - symlink included, which is
+// then simply gone rather than followed.
+func WriteAtomic(path string, raw []byte) bool {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+"-*")
+	if err != nil {
+		return false
+	}
+	name := tmp.Name()
+	if _, err := tmp.Write(raw); err != nil {
+		tmp.Close()
+		os.Remove(name)
+		return false
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		os.Remove(name)
+		return false
+	}
+	if tmp.Close() != nil || os.Rename(name, path) != nil {
+		os.Remove(name)
+		return false
+	}
+	return true
 }
 
 // Sweep drops the leftovers of sessions that died without a SessionEnd.
+//
+// It matches on the name and the age, so on a shared $TMPDIR it can in
+// principle line up with somebody else's file. Two things keep that harmless:
+// /tmp carries the sticky bit, so the kernel refuses the unlink of a file we do
+// not own, and the Lstat below means a symlink is never followed to something
+// outside the directory - only the link itself would go.
 func Sweep(now time.Time) {
 	dir := TmpDir()
 	entries, err := os.ReadDir(dir)
@@ -165,10 +223,11 @@ func Sweep(now time.Time) {
 		if !strings.HasPrefix(e.Name(), Prefix) {
 			continue
 		}
-		info, err := e.Info()
-		if err != nil || !info.ModTime().Before(cutoff) {
+		path := filepath.Join(dir, e.Name())
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() || !info.ModTime().Before(cutoff) {
 			continue
 		}
-		os.Remove(filepath.Join(dir, e.Name()))
+		os.Remove(path)
 	}
 }

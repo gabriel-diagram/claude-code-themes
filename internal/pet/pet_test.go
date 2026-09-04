@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -199,41 +200,55 @@ func TestTheThresholdsAreTheFirstVersionsComfortCurve(t *testing.T) {
 	}
 }
 
-func TestTheNeckIsTheTightestAndNotTheAverage(t *testing.T) {
-	// A mean dilutes, and that is what it was doing: the context full at 100
-	// with the quotas at 20 and 10 came back as 58, which is "a gusto" - the
-	// pet reporting comfort with no window left to work in. The first version
-	// took the worst of the three on purpose: "refleja el cuello mas apretado".
+func TestTheStateIsTheSessionAndNotTheAccount(t *testing.T) {
+	// Three answers to one question, and the third is the session's own.
+	//
+	// A 50/30/20 mean DILUTED: the window full at 100 with the quotas at 20
+	// and 10 came back as 58, which is "a gusto" - the pet reporting comfort
+	// with no room left to work in. The tightest of the three necks fixed that
+	// and bought a different lie: the quotas belong to the ACCOUNT, so two
+	// sessions open at once, one at 6% of context and one at 64%, both sat
+	// there saying "cansada" off a 5h quota at 81.
 	f := func(v float64) *float64 { return &v }
 	nan := math.NaN()
 	for _, c := range []struct {
-		name             string
-		ctx, five, seven *float64
-		want             float64
+		name string
+		ctx  *float64
+		want float64
 	}{
-		{"context alone", f(50), nil, nil, 50},
-		{"nothing at all", nil, nil, nil, 0},
-		{"the full window is the neck", f(100), f(20), f(10), 100},
-		{"a quota can be the neck too", f(50), f(95), f(90), 95},
-		{"the old blend would have said 95 here", f(100), f(90), f(90), 100},
-		{"NaN is not in the running", &nan, f(30), nil, 30},
-		{"out of range is clamped", f(140), nil, nil, 100},
-		{"and so is a negative", f(-5), nil, nil, 0},
+		{"the window is the whole of it", f(50), 50},
+		{"nothing known is nothing claimed", nil, 0},
+		{"a full window", f(100), 100},
+		{"NaN is not a reading", &nan, 0},
+		{"out of range is clamped", f(140), 100},
+		{"and so is a negative", f(-5), 0},
 	} {
-		if got := Bottleneck(c.ctx, c.five, c.seven); got != c.want {
-			t.Errorf("%s: Bottleneck = %v, want %v", c.name, got, c.want)
+		if got := ContextLoad(c.ctx); got != c.want {
+			t.Errorf("%s: ContextLoad = %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+func TestAQuotaCannotMoveTheState(t *testing.T) {
+	// The quotas are not arguments any more, which is the point stated as a
+	// type: an empty window is a fresh creature no matter what the account has
+	// spent today, and band 1 is where you go to find out what it has spent.
+	if got := StateFor(ContextLoad(ptr(6))).Label; got != "fresh" {
+		t.Errorf("a window at 6%% gave %q, want fresh", got)
+	}
+	if got := StateFor(ContextLoad(ptr(81))).Label; got != "tired" {
+		t.Errorf("a window at 81%% gave %q, want tired", got)
 	}
 }
 
 func TestTheKOArrivesWithoutASpecialDoor(t *testing.T) {
 	// StateFor used to take the context as a second argument purely so a full
 	// window could force the k.o., because a weighted mean of three numbers
-	// cannot reach 100 unless all three do. The neck reaches it on its own.
-	if got := StateFor(Bottleneck(ptr(100), ptr(20), ptr(10))).Label; got != "k.o." {
+	// cannot reach 100 unless all three do. The context reaches it on its own.
+	if got := StateFor(ContextLoad(ptr(100))).Label; got != "k.o." {
 		t.Errorf("a full context gave %q, want k.o.", got)
 	}
-	if got := StateFor(Bottleneck(ptr(95), ptr(30), ptr(20))).Label; got != "drowning" {
+	if got := StateFor(ContextLoad(ptr(95))).Label; got != "drowning" {
 		t.Errorf("95 gave %q, want drowning", got)
 	}
 }
@@ -327,12 +342,12 @@ func TestATieFallsBackToDesignOrder(t *testing.T) {
 }
 
 func TestASecretWinsOverTheTreeAndAnUnknownOneIsIgnored(t *testing.T) {
-	won := &State{XP: 900, Secret: "phoenix",
+	won := &State{XP: xpFor(5), Secret: "phoenix",
 		Counters: map[string]int{"impulsive": 9, "ctx_maxed": 9}}
 	if form, level := CurrentForm(won); form != "phoenix" || level != 5 {
 		t.Errorf("secret gave %s/%d, want phoenix/5", form, level)
 	}
-	if form, _ := CurrentForm(&State{XP: 900, Secret: "godzilla"}); form == "godzilla" {
+	if form, _ := CurrentForm(&State{XP: xpFor(5), Secret: "godzilla"}); form == "godzilla" {
 		t.Error("an unknown secret was handed over")
 	}
 }
@@ -352,14 +367,14 @@ func TestASecretStillWaitsForLevelFive(t *testing.T) {
 	}
 
 	// One more level and it is hers.
-	pending.XP = 900
+	pending.XP = xpFor(5)
 	if form, level := CurrentForm(pending); form != "chimera" || level != 5 {
-		t.Errorf("at 900 xp the secret gave %s/%d, want chimera/5", form, level)
+		t.Errorf("at level-5 xp the secret gave %s/%d, want chimera/5", form, level)
 	}
 }
 
 func TestAMarkNeedsItsHabit(t *testing.T) {
-	base := &State{XP: 1000, Counters: map[string]int{"methodical": 9, "diffs": 9}}
+	base := &State{XP: xpFor(5), Counters: map[string]int{"methodical": 9, "diffs": 9}}
 	if form, _ := CurrentForm(base); form != "refactor" {
 		t.Fatalf("without the habit the form is %s", form)
 	}
@@ -385,7 +400,7 @@ func TestNextThresholdRunsOutAtTheTop(t *testing.T) {
 	if xp, ok := NextThreshold(0); !ok || xp != 60 {
 		t.Errorf("NextThreshold(0) = %d,%v", xp, ok)
 	}
-	if _, ok := NextThreshold(1900); ok {
+	if _, ok := NextThreshold(xpFor(6)); ok {
 		t.Error("there is something after level 5")
 	}
 }
@@ -928,9 +943,9 @@ func TestTheXPBarMeasuresTheLevelNotTheTotal(t *testing.T) {
 		{60, 0, 120},   // level 2 opens EMPTY, not at a third
 		{120, 60, 120}, // halfway through level 2
 		{179, 119, 120},
-		{180, 0, 220}, // level 3 opens empty
-		{400, 0, 500}, // level 4 opens empty
-		{899, 499, 500},
+		{180, 0, 220},  // level 3 opens empty
+		{400, 0, 1600}, // level 4 opens empty, and it is the long one
+		{1999, 1599, 1600},
 	} {
 		done, span, ok := LevelProgress(c.xp)
 		if !ok {
@@ -944,7 +959,7 @@ func TestTheXPBarMeasuresTheLevelNotTheTotal(t *testing.T) {
 }
 
 func TestTheXPStretchRunsOutAtTheTop(t *testing.T) {
-	for _, xp := range []int{1900, 2400, 99999} {
+	for _, xp := range []int{xpFor(6), xpFor(6) + 500, 99999} {
 		if _, _, ok := LevelProgress(xp); ok {
 			t.Errorf("xp %d still has a stretch above it", xp)
 		}
@@ -967,7 +982,7 @@ func TestAHandEditedNegativeXPReadsAsANewborn(t *testing.T) {
 func TestAtTheTopTheProgressBecomesTheHabit(t *testing.T) {
 	// Level 5, trade but no mark: what is left to reach is the habit.
 	s := New()
-	s.XP = 900
+	s.XP = xpFor(5)
 	s.Counters["inquisitive"] = 5
 	s.Counters["tests"] = 9
 	s.Counters["repro_before_fix"] = 4 // sabueso wants 10 -> 0.40
@@ -993,7 +1008,7 @@ func TestAMarkStillHasItsTitleToReach(t *testing.T) {
 	// one now, asking for a good deal more of the same habit, so band 4 keeps
 	// a bar to fill.
 	s := New()
-	s.XP = 900
+	s.XP = xpFor(5)
 	s.Counters["inquisitive"] = 5
 	s.Counters["tests"] = 9
 	s.Counters["test_streak"] = 15 // earned it
@@ -1010,7 +1025,7 @@ func TestAMarkStillHasItsTitleToReach(t *testing.T) {
 			mark.Form, mark.Done, mark.Threshold, TitleAsks["wasp"])
 	}
 	// And a pet wearing the TITLE has nothing beyond it.
-	s.XP = 1900
+	s.XP = xpFor(6)
 	s.Counters["test_streak"] = TitleAsks["wasp"]
 	title, _ := CurrentForm(s)
 	if title != "wasp" {
@@ -1023,7 +1038,7 @@ func TestAMarkStillHasItsTitleToReach(t *testing.T) {
 
 func TestASecretHasNothingLeftToReach(t *testing.T) {
 	s := New()
-	s.XP = 900
+	s.XP = xpFor(5)
 	s.Secret = "phoenix"
 	form, _ := CurrentForm(s)
 	if _, ok := NextMark(s, form); ok {
@@ -1205,11 +1220,15 @@ func TestStarvingCanCostALevelButNeverKills(t *testing.T) {
 			LevelFor(s.XP))
 	}
 
-	// Left alone long enough it bottoms out at the larva - at StarveXP an hour
-	// that is about six weeks from the top - and stays there. Never dies.
-	DecayHunger(s, now.Add(50*24*time.Hour))
+	// Left alone long enough it bottoms out at the larva and stays there. Never
+	// dies. At StarveXP an hour the wall clock needed is the whole ladder, so
+	// it is taken off Levels rather than written down: widening level 4 pushed
+	// this from about six weeks to about twelve, and a hard-coded fifty days
+	// would have turned this into a test that asserts nothing.
+	hours := xpFor(6) + 48 // the ladder, and a day's slack for the decay to start
+	DecayHunger(s, now.Add(time.Duration(hours)*time.Hour))
 	if s.XP != 0 {
-		t.Errorf("fifty days of neglect left %d xp, want it bottomed out", s.XP)
+		t.Errorf("%d hours of neglect left %d xp, want it bottomed out", hours, s.XP)
 	}
 	if form, level := CurrentForm(s); form != Root || level != 1 {
 		t.Errorf("bottomed out as %s/%d, want the larva at level 1", form, level)
@@ -1519,4 +1538,26 @@ func allForms() []string {
 		out = append(out, f)
 	}
 	return out
+}
+
+// The note on a meal comes from outside - a commit subject, the text of a plan
+// task - and both the panel and the speech bubble put it on a row with other
+// things. A newline in it broke the panel's log entry into three rows, with the
+// time stranded on the last one.
+func TestAMealsNoteIsFlattenedBeforeItIsStored(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pet.json")
+	now := time.Now()
+	Update(path, func(s *State) bool {
+		return Feed(s, "task", "arreglar\nel\nbicho", now)
+	})
+
+	log := Load(path).Log
+	if len(log) != 1 {
+		t.Fatalf("want one meal, got %d", len(log))
+	}
+	if got := log[0].Note; strings.ContainsAny(got, "\n\r\t") {
+		t.Errorf("the note kept its control characters: %q", got)
+	} else if got != "arreglar el bicho" {
+		t.Errorf("note %q, want %q", got, "arreglar el bicho")
+	}
 }

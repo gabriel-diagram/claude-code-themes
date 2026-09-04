@@ -49,10 +49,7 @@ func Run(args []string, stdout, stderr io.Writer, statePath string, now time.Tim
 		if first == "" {
 			return 2
 		}
-		s := pet.Load(statePath)
-		if s.MarkDay(first, now) {
-			pet.Save(s, statePath)
-		}
+		pet.Update(statePath, func(s *pet.State) bool { return s.MarkDay(first, now) })
 		return 0
 
 	case "count", "record":
@@ -70,13 +67,14 @@ func Run(args []string, stdout, stderr io.Writer, statePath string, now time.Tim
 			}
 			n = parsed
 		}
-		s := pet.Load(statePath)
-		if action == "count" {
-			s.Bump(first, n)
-		} else {
-			s.RecordMax(first, n)
-		}
-		pet.Save(s, statePath)
+		pet.Update(statePath, func(s *pet.State) bool {
+			if action == "count" {
+				s.Bump(first, n)
+			} else {
+				s.RecordMax(first, n)
+			}
+			return true
+		})
 		return 0
 
 	case "session":
@@ -100,10 +98,28 @@ func Run(args []string, stdout, stderr io.Writer, statePath string, now time.Tim
 }
 
 func eat(out io.Writer, statePath, event, note string, now time.Time) int {
-	s := pet.Load(statePath)
-	pet.DecayHunger(s, now)
-	before, _ := pet.CurrentForm(s)
-	if !pet.Feed(s, event, note, now) {
+	// The whole read-decide-write runs under one lock: another session feeding
+	// the same pet between the read and the write would otherwise undo this
+	// meal, and the cooldown check would have been made against a state that
+	// no longer exists.
+	var s *pet.State
+	var before, after string
+	var refused bool
+	pet.Update(statePath, func(st *pet.State) bool {
+		s = st
+		pet.DecayHunger(st, now)
+		before, _ = pet.CurrentForm(st)
+		if !pet.Feed(st, event, note, now) {
+			refused = true
+			return false
+		}
+		after, _ = pet.CurrentForm(st)
+		// Worked out before the write, not after, so the rung it has just
+		// reached goes into the same save as the meal that got it there.
+		pet.RememberForm(st, after)
+		return true
+	})
+	if refused {
 		if left := pet.Waiting(s, event, now); left > 0 {
 			fmt.Fprintf(out, "%sya ha comido. le toca en %s%s\n",
 				theme.Fg(theme.Dim), roughly(left), theme.Reset)
@@ -113,11 +129,6 @@ func eat(out io.Writer, statePath, event, note string, now time.Time) int {
 		}
 		return 0
 	}
-	after, _ := pet.CurrentForm(s)
-	// Worked out before the write, not after, so the rung it has just reached
-	// goes into the same save as the meal that got it there.
-	pet.RememberForm(s, after)
-	pet.Save(s, statePath)
 
 	food := pet.Foods[event]
 	tint := theme.Ident
@@ -181,6 +192,9 @@ func roughly(d time.Duration) string {
 }
 
 func showPanel(out io.Writer, statePath string, now time.Time) int {
+	// Read-only: DecayHunger is applied to the copy in hand so the panel shows
+	// today's hunger, and deliberately not written back - printing the pet is
+	// not an event in its life.
 	s := pet.Load(statePath)
 	pet.DecayHunger(s, now)
 	form, level := pet.CurrentForm(s)

@@ -76,31 +76,30 @@ func engine(p *Payload, tps *float64, accent *theme.Colour) []segment {
 	}
 
 	if p.ContextPc != nil {
-		// The bar is coloured off the SAME ladder the pet is: pet.Vitals, the
-		// first version's comfort curve. It used to run its own three-step
-		// scale - green under 60, amber under 85, red above - on its own
-		// palette, so the same footer painted the same session in two colours
-		// that agreed about nothing. At ctx 100 with the quotas low the bar
-		// went red while the pet sat there in "a gusto" turquoise.
+		// The bar IS the context, in length and in number, and so is the
+		// creature: one measurement on one line. Anything else has been tried
+		// and read as a bug. When the bar was the context and only borrowed the
+		// neck's colour, ctx 48 beside a 5h at 67 drew a half-full bar next to
+		// the word "espesa", which is the reading for 67. When the bar was
+		// promoted to the neck to close that gap, it printed "82% 5h" three
+		// columns before the band printed "5h 82%" again, and the context - the
+		// one figure of the three that belongs to this session, and the only
+		// one you can do anything about - was left with a bare "7%".
 		//
-		// It takes its colour from the NECK, which is what the pet reads, so the
-		// two can never disagree. Colouring it off the context alone was tried
-		// and it was still wrong: with the context at 22 and the 5h quota at 46
-		// the bar came out green "fresca" beside a turquoise "a gusto" pet, and
-		// a difference nobody asked for reads as a bug, not as a reading.
+		// The quotas keep the reading they had all along: bare numbers at the
+		// end of the band, painted off this same ladder, so a 5h at 95 arrives
+		// in the pet's own drowning indigo. What they no longer do is speak for
+		// a session they know nothing about. See pet.ContextLoad.
 		//
-		// So the bar says two things at once, on purpose: its LENGTH and its
-		// number are the context - the thing you can actually manage - and its
-		// COLOUR is how the session as a whole feels, which is the pet's.
-		//
-		// "The pet's" is now literal. It took the state ladder's colour, which
-		// AGREED with the creature about how the session felt but not about
-		// what was doing the feeling: the ladder is one scale for every pet,
-		// and since the atlas the creature's hue belongs to its branch. A blue
-		// cazabugs sat beside a green bar that meant the same thing. Same
-		// number, same rung, same colour now.
-		vital := pet.StateFor(pet.Bottleneck(p.ContextPc, p.FiveHour, p.SevenDay))
-		fill := vital.Colour
+		// The colour is the creature's own body, which is the trick this band
+		// turns: the top-left of the statusline and the pet on the right are
+		// one reading in one colour, not two colour schemes describing the same
+		// session. It used to be the state ladder's colour, which agreed with
+		// the creature about how the session felt but not about what was doing
+		// the feeling - one scale for every pet, while since the atlas the hue
+		// belongs to the branch. A blue cazabugs sat beside a green bar that
+		// meant the same thing.
+		fill := pet.StateFor(pet.ContextLoad(p.ContextPc)).Colour
 		if accent != nil {
 			fill = *accent
 		}
@@ -123,13 +122,18 @@ func engine(p *Payload, tps *float64, accent *theme.Colour) []segment {
 
 	// The two rate limits, as bare numbers - no bars. They used to have their
 	// own bars down in band 3, and when band 3 became just the folder they had
-	// nowhere to live: the pet reads them (the usage is the tightest of the
-	// three necks) so a squeezed quota could sink it with nothing on screen
-	// saying why.
+	// nowhere to live.
 	//
-	// The number is painted off the SAME ladder as the bar and the pet, so a 5h
-	// at 95 shows up in the pet's own indigo. That is the whole answer to "why
-	// is it drowning with the window empty".
+	// This is the whole reading of the quotas now, and it is enough. They are
+	// the ACCOUNT's, not this session's, so they say nothing about how the
+	// window in front of you feels and the creature does not read them. What
+	// they do say - how much of the day is left - takes a number, not a
+	// silhouette.
+	//
+	// The number is still painted off the SAME ladder as the bar and the pet,
+	// which is what keeps it from being a footnote: a 5h at 95 arrives in the
+	// pet's own drowning indigo, so the thing that is about to stop you is the
+	// loudest colour on the line even while the creature is green.
 	first := true
 	for _, limit := range []struct {
 		value *float64
@@ -138,9 +142,14 @@ func engine(p *Payload, tps *float64, accent *theme.Colour) []segment {
 		if limit.value == nil {
 			continue
 		}
-		text := strconv.Itoa(round(*limit.value)) + "%"
+		// Clamped, like every other reading of a percentage on this line.
+		// pet.ContextLoad already rejects NaN and pins the context to [0,100]
+		// for the bar; this printed whatever arrived, so a payload carrying
+		// -5 or 400 drew a sane bar beside "5h -5%". One band, one rule.
+		value := pet.ContextLoad(limit.value)
+		text := strconv.Itoa(round(value)) + "%"
 		s := seg(4, theme.Fg(theme.Dim)+limit.tag+" "+theme.Reset+
-			theme.Fg(pet.StateFor(*limit.value).Colour)+text+theme.Reset)
+			theme.Fg(pet.StateFor(value).Colour)+text+theme.Reset)
 		// The 7d hugs the 5h: the two read as one block, as they always did.
 		if !first {
 			s = s.withSep("  ")
@@ -261,6 +270,22 @@ func petBand(c Card, columns int) []segment {
 		return out
 	}
 
+	// Where it is going, glued to what it is: `cazabugs[sabueso]`. The
+	// brackets are the tense - a name says "is", a bracket says "heading for"
+	// - and they are what makes the long silent stretch of level 4 readable at
+	// all. See Card.Toward.
+	//
+	// No separator, because it is not a second thing on the line: it is part
+	// of the name. It drops just after the bubble and before everything else,
+	// which is the right order for a forecast sitting next to a fact.
+	if c.Toward != "" {
+		bracket := theme.Fg(theme.Rule) + "[" + theme.Reset +
+			theme.Fg(theme.Number) + c.Toward + theme.Reset +
+			theme.Fg(theme.Rule) + "]" + theme.Reset
+		out = append(out, seg(5, bracket).
+			truncatable(theme.Fg(theme.Number), "["+c.Toward+"]").withSep(""))
+	}
+
 	level := "nivel " + strconv.Itoa(c.Level)
 	out = append(out, seg(2,
 		theme.Fg(theme.Dim)+"nivel "+theme.Reset+
@@ -297,7 +322,7 @@ func petBand(c Card, columns int) []segment {
 	}
 
 	if c.Bubble != "" {
-		out = append(out, seg(5,
+		out = append(out, seg(6,
 			theme.Fg(theme.Tail)+"◗"+theme.Reset+" "+
 				theme.Fg(theme.Text)+c.Bubble+theme.Reset).
 			truncatable(theme.Fg(theme.Text), c.Bubble))

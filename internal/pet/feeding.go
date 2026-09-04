@@ -1,6 +1,10 @@
 package pet
 
-import "time"
+import (
+	"time"
+
+	"github.com/gabriel-diagram/claude-code-themes/internal/theme"
+)
 
 // What counts as food, and what eating it does to the pet.
 
@@ -172,6 +176,12 @@ func Feed(s *State, event, note string, now time.Time) bool {
 		s.LastDay = day
 	}
 
+	// Flattened before it is stored, not before it is drawn: this note comes
+	// from outside - a commit subject, the text of a plan task - and both the
+	// panel and the speech bubble put it on a row with other things. A newline
+	// in it broke the panel's log entry into three rows, with the time left
+	// stranded on the last one. See theme.OneLine.
+	note = theme.OneLine(note)
 	if len(note) > 40 {
 		note = truncate(note, 40)
 	}

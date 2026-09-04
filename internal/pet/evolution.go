@@ -67,10 +67,29 @@ type Level struct {
 
 // Levels: accumulated XP -> level.
 //
-// Six now. The sixth is the titles, and it sits where a week of level 5 puts
-// you: the gaps have been running 60, 120, 220, 500, so 1000 more after 900 is
-// the same curve continued rather than a wall.
-var Levels = []Level{{0, 1}, {60, 2}, {180, 3}, {400, 4}, {900, 5}, {1900, 6}}
+// Six. The sixth is the titles, and the last two gaps are deliberately much
+// wider than the curve that leads up to them - 60, 120, 220, then 1600 and
+// 2500.
+//
+// That break is the point. Level 4 is the one rung of the tree where NOTHING
+// forks: the temperament is chosen at 2, the trade at 3, and the mark waits
+// for 5. So the whole of level 4 is the stretch where the habit that decides
+// the mark is still moving and can still change its mind - a `bughunter` who
+// starts reproducing bugs before fixing them leans `bloodhound`, one who
+// strings green suites together leans `exterminator`, and either can overtake
+// the other while the level lasts.
+//
+// It used to last 500 XP. Measured against a real day's feeding - about 12 XP
+// a meal, some sixty an hour of actual work - that is eight hours: one long
+// session, and the fork was decided before the habits had a week to say
+// anything. 1600 puts it around twenty-five hours of work, which is what the
+// stretch is FOR now that band 4 shows where the pet is heading while it
+// climbs. See Card.Toward.
+//
+// The cost, with eyes open: XP falls - `overflow` takes 15, hunger takes more
+// - so a level lost is now a much longer climb back. That is the same trade
+// the wider gap buys, seen from the other side.
+var Levels = []Level{{0, 1}, {60, 2}, {180, 3}, {400, 4}, {2000, 5}, {4500, 6}}
 
 // BranchBy names the counter that decides each fork. Highest wins on level-up.
 var BranchBy = map[string]string{

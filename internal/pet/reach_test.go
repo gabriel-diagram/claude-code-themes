@@ -24,10 +24,24 @@ import (
 // raising counters only. Never by lowering one, because playing cannot lower
 // one.
 
+// xpFor is the XP that opens a level, read off Levels rather than written
+// down. Every test that wants "a pet at level 5" used to spell 900 out, so
+// widening the ladder meant chasing the number through thirty-odd literals -
+// and any one of them missed is a test that quietly asserts nothing.
+func xpFor(level int) int {
+	best := 0
+	for _, l := range Levels {
+		if l.Level <= level && l.XP > best {
+			best = l.XP
+		}
+	}
+	return best
+}
+
 // veteran is a pet that has done everything, a lot. Under the old rule this
 // state could only ever be seven of the fourteen marks.
 func veteran() *State {
-	s := &State{XP: 1900, Counters: map[string]int{}}
+	s := &State{XP: xpFor(6), Counters: map[string]int{}}
 	for _, c := range BranchBy {
 		s.Counters[c] = 500
 	}
@@ -38,19 +52,19 @@ func veteran() *State {
 }
 
 // tierXP is the XP a form's own tier sits at: a spark is level 1 and a title is
-// level 6, so asking whether a spark is "reachable" at 1900 XP is asking the
+// level 6, so asking whether a spark is "reachable" at xpFor(6) XP is asking the
 // wrong question.
 func tierXP(form string) int {
 	switch {
 	case form == Root:
 		return 0
 	case isSecret(form):
-		return 900
+		return xpFor(5)
 	case isTitle(form):
-		return 1900
+		return xpFor(6)
 	}
 	if _, mark := Unlocks[form]; mark {
-		return 900
+		return xpFor(5)
 	}
 	depth := 0
 	for f, ok := Parent[form]; ok; f, ok = Parent[f] {
@@ -209,7 +223,7 @@ func TestASiblingIsNotLockedOutByTheOneEarnedFirst(t *testing.T) {
 			continue
 		}
 		for _, want := range kids {
-			s := &State{XP: 900, Counters: map[string]int{}}
+			s := &State{XP: xpFor(5), Counters: map[string]int{}}
 			// Every sibling already earned, the first one by a mile: the shape
 			// the old rule froze.
 			for i, kid := range kids {
@@ -255,7 +269,7 @@ func TestTheBarNamesTheMarkTheWalkWouldGive(t *testing.T) {
 				t.Errorf("%s: la barra apunta a %s, se esperaba %s", parent, mark.Form, want)
 			}
 			// Same state, enough XP: the walk must agree with the bar.
-			s.XP = 900
+			s.XP = xpFor(5)
 			if got, _ := CurrentForm(s); got != mark.Form {
 				t.Errorf("%s: la barra dice %s y la caminata da %s", parent, mark.Form, got)
 			}
@@ -372,7 +386,7 @@ func TestEveryFormSitsOnTheRungItIsWornAt(t *testing.T) {
 // The whole point, stated once: the streak falls all the way to zero and the
 // shape stays on its rung.
 func TestABrokenStreakNeverTakesTheShapeDownTheTree(t *testing.T) {
-	s := &State{XP: 1900, Counters: map[string]int{"inquisitive": 20, "tests": 20}}
+	s := &State{XP: xpFor(6), Counters: map[string]int{"inquisitive": 20, "tests": 20}}
 	s.Counters["test_streak"] = TitleAsks["wasp"]
 	form, _ := CurrentForm(s)
 	if form != "wasp" {
@@ -396,7 +410,7 @@ func TestABrokenStreakNeverTakesTheShapeDownTheTree(t *testing.T) {
 // and not the form itself: losing the test streak with the other habit earned
 // is a real change and says something true about the week.
 func TestTheShapeStillMovesSidewaysAlongItsRung(t *testing.T) {
-	s := &State{XP: 900, Counters: map[string]int{
+	s := &State{XP: xpFor(5), Counters: map[string]int{
 		"inquisitive": 20, "tests": 20,
 		"test_streak":      20, // exterminator, ripest
 		"repro_before_fix": 10, // bloodhound, earned
@@ -419,13 +433,13 @@ func TestTheShapeStillMovesSidewaysAlongItsRung(t *testing.T) {
 
 // Up is allowed from anywhere on the rung, floor or no floor.
 func TestTheFloorNeverBlocksTheWayUp(t *testing.T) {
-	s := &State{XP: 900, Counters: map[string]int{
+	s := &State{XP: xpFor(5), Counters: map[string]int{
 		"inquisitive": 20, "tests": 20, "test_streak": 20,
 	}}
 	form, _ := CurrentForm(s)
 	RememberForm(s, form) // exterminator, rung 5
 
-	s.XP = 1900
+	s.XP = xpFor(6)
 	s.Counters["test_streak"] = TitleAsks["wasp"]
 	if got, _ := CurrentForm(s); got != "wasp" {
 		t.Errorf("con el titulo ganado sale %s, se esperaba wasp", got)
@@ -454,7 +468,7 @@ func TestTheFloorRemembersTheRungAndNotTheShape(t *testing.T) {
 // An older pet.json has no form_seen at all, and that has to be the same thing
 // as no floor - the pet keeps whatever it already is and the rung starts there.
 func TestAFileWithNoRungRecordedStartsFromWhereverItIs(t *testing.T) {
-	s := &State{XP: 900, Counters: map[string]int{
+	s := &State{XP: xpFor(5), Counters: map[string]int{
 		"inquisitive": 20, "tests": 20, "repro_before_fix": 10,
 	}}
 	if s.FormSeen != "" {
@@ -502,7 +516,7 @@ func TestTheTwelveCumulativeMarksNeverMoveAtAll(t *testing.T) {
 func TestTheRungSurvivesTheRoundTrip(t *testing.T) {
 	path := t.TempDir() + "/pet.json"
 	s := New()
-	s.XP = 900
+	s.XP = xpFor(5)
 	s.Counters = map[string]int{"inquisitive": 20, "tests": 20, "test_streak": 20}
 	form, _ := CurrentForm(s)
 	RememberForm(s, form)
@@ -533,7 +547,7 @@ func TestTheRungIsTranslatedAndSanitisedOnTheWayIn(t *testing.T) {
 	} {
 		path := t.TempDir() + "/pet.json"
 		if err := os.WriteFile(path,
-			[]byte(`{"xp":900,"form_seen":`+strconv.Quote(tc.stored)+`}`), 0o600); err != nil {
+			[]byte(`{"xp":`+strconv.Itoa(xpFor(5))+`,"form_seen":`+strconv.Quote(tc.stored)+`}`), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		if got := Load(path).FormSeen; got != tc.want {
@@ -555,7 +569,7 @@ func TestTheRungIsTranslatedAndSanitisedOnTheWayIn(t *testing.T) {
 func TestTheFloorCannotBlockThePhoenix(t *testing.T) {
 	for _, branch := range []string{"feral", "marathon"} {
 		s := New()
-		s.XP = 900
+		s.XP = xpFor(5)
 		s.Counters = map[string]int{BranchBy["ember"]: 99, BranchBy[branch]: 99}
 		if got, _ := walk(s); got != branch {
 			t.Fatalf("el camino a %s da %s", branch, got)
@@ -590,7 +604,7 @@ func TestThePhoenixIsStillReachableWithAFloorInPlace(t *testing.T) {
 	if s.Secret != "phoenix" {
 		t.Fatalf("el fenix no se concedio: secret = %q", s.Secret)
 	}
-	s.XP = 900
+	s.XP = xpFor(5)
 	if got, _ := CurrentForm(s); got != "phoenix" {
 		t.Errorf("con el fenix ganado sale %s", got)
 	}
@@ -611,7 +625,7 @@ func TestThePhoenixIsStillReachableWithAFloorInPlace(t *testing.T) {
 // alternative - dropping to a trade you already outgrew - is the thing it
 // exists to prevent.
 func TestChangingTemperamentDoesNotUndoAMarkUntilTheNewBranchEarnsOne(t *testing.T) {
-	s := &State{XP: 900, Counters: map[string]int{
+	s := &State{XP: xpFor(5), Counters: map[string]int{
 		"inquisitive": 20, "tests": 20, "test_streak": 20,
 	}}
 	form, _ := CurrentForm(s)
@@ -650,7 +664,7 @@ func TestACloneSharesNothingWithItsOriginal(t *testing.T) {
 	s.Said = append(s.Said, "hola")
 
 	c := s.Clone()
-	c.XP = 1900
+	c.XP = xpFor(6)
 	c.Counters["tests"] = 999
 	c.Counters["new"] = 1
 	c.Meals["commit"] = 222
@@ -704,7 +718,7 @@ func TestCloningAnEmptyStateIsSafe(t *testing.T) {
 // TestStarvingCanCostALevelButNeverKills exists to protect.
 func TestTheShapeHoldsWhileTheLevelIsStillAllowedToFall(t *testing.T) {
 	s := New()
-	s.XP = 1900
+	s.XP = xpFor(6)
 	s.Counters = map[string]int{"inquisitive": 20, "tests": 20, "test_streak": TitleAsks["wasp"]}
 	form, level := CurrentForm(s)
 	if form != "wasp" || level != 6 {
@@ -720,7 +734,7 @@ func TestTheShapeHoldsWhileTheLevelIsStillAllowedToFall(t *testing.T) {
 		t.Errorf("la forma cayo a %s, y una forma no baja de escalon", form)
 	}
 	if level != 5 {
-		t.Errorf("el nivel es %d; la XP cayo por debajo de 1900 y el nivel la sigue", level)
+		t.Errorf("el nivel es %d; la XP cayo por debajo de xpFor(6) y el nivel la sigue", level)
 	}
 }
 

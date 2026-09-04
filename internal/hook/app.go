@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gabriel-diagram/claude-code-themes/internal/lockfile"
 	"github.com/gabriel-diagram/claude-code-themes/internal/pet"
 	"github.com/gabriel-diagram/claude-code-themes/internal/session"
 	"github.com/gabriel-diagram/claude-code-themes/internal/setup"
@@ -78,19 +79,48 @@ func saveHookState(path string, h hookState) {
 	if path == "" {
 		return
 	}
+	// Through session.Save's writer, for the reason given there: a bare
+	// os.WriteFile follows a symlink planted at the path.
 	if raw, err := json.Marshal(h); err == nil {
-		os.WriteFile(path, raw, 0o600)
+		session.WriteAtomic(path, raw)
 	}
 }
 
 // toolsUsed reads the distinct tools seen since the previous closed task, and
 // clears the log.
+//
+// It RENAMES the log aside and reads the renamed copy, rather than reading and
+// then deleting. Read-then-delete has a gap: a tool logged after the read and
+// before the delete is neither counted nor left behind, it is thrown away
+// unread. PostToolUse fires on every tool call, so writers are arriving the
+// whole time - measured on the old version, 60 rounds out of 60 lost names,
+// 17,508 of 24,000.
+//
+// The rename is most of the fix: it is one atomic step, so an append that has
+// already happened either landed in the file we took or lands in the fresh one
+// the next writer creates. What it does NOT cover is a writer that opened the
+// file before the rename and writes after it - that append goes into the
+// renamed inode and is dropped with it. Measured, that last gap was 41 names in
+// 24,000. The lock closes it: logTool holds it while it writes, so no append is
+// ever in flight across the rename.
+//
+// What it costs: sniper counts the distinct tools between two closed tasks. A
+// dropped tool made a multi-tool task look like a single-tool one and paid out
+// a counter that was not earned.
 func toolsUsed(path string) map[string]bool {
 	out := map[string]bool{}
 	if path == "" {
 		return out
 	}
-	raw, err := os.ReadFile(path)
+	release, _ := lockfile.Take(path)
+	taken := path + ".taken"
+	err := os.Rename(path, taken)
+	release()
+	if err != nil {
+		return out
+	}
+	raw, err := os.ReadFile(taken)
+	os.Remove(taken)
 	if err != nil {
 		return out
 	}
@@ -99,7 +129,6 @@ func toolsUsed(path string) map[string]bool {
 			out[name] = true
 		}
 	}
-	os.Remove(path)
 	return out
 }
 
@@ -107,6 +136,13 @@ func logTool(path, name string) {
 	if path == "" || name == "" {
 		return
 	}
+	// The lock is held across open-write-close so the append cannot be in
+	// flight while toolsUsed renames the file out from under it. O_APPEND
+	// alone makes each write atomic against other writes; it says nothing
+	// about a rename happening between this open and this write.
+	release, _ := lockfile.Take(path)
+	defer release()
+
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
@@ -171,16 +207,22 @@ func Run(stdin io.Reader, statePath string, now time.Time) int {
 
 	switch event {
 	case "PreCompact":
-		s := pet.Load(statePath)
-		pet.DecayHunger(s, now)
-		pet.Feed(s, "compact", "", now)
-		pet.Save(s, statePath)
+		pet.Update(statePath, func(s *pet.State) bool {
+			pet.DecayHunger(s, now)
+			pet.Feed(s, "compact", "", now)
+			return true
+		})
 		return 0
 	case "SessionEnd":
 		if sessionID != "" {
 			CloseSession(session.PathFor(sessionID, ""), statePath, now)
-			os.Remove(hookPath)
-			os.Remove(toolsPath)
+			// Everything this session left in $TMPDIR, including the lock
+			// beside the tool log and the statusline's git cache. Sweep would
+			// get them in a day; this gets them now.
+			for _, p := range []string{hookPath, toolsPath, session.PathFor(sessionID, "git")} {
+				os.Remove(p)
+				os.Remove(lockfile.Path(p))
+			}
 		}
 		return 0
 	}
@@ -224,39 +266,45 @@ func handleTodos(payload map[string]any, h *hookState, toolsPath, statePath stri
 		}
 	}
 
-	s := pet.Load(statePath)
-	touched := false
-
-	// oracle: "5 plans written before touching code". A plan is a TodoWrite
-	// with several tasks and none closed; it only counts while nothing is
-	// edited yet.
-	if pending >= planMinTasks && done == 0 && h.Code == 0 && h.PlanCounted == 0 {
-		h.PlanCounted = 1
-		s.Bump("plans_before_code", 1)
-		touched = true
+	// toolsUsed empties the log as it reads, so it is called once, out here,
+	// rather than inside the update.
+	soleTool := false
+	if done > h.Done {
+		soleTool = len(toolsUsed(toolsPath)) == 1
 	}
 
-	// cartographer: the longest plan closed in full.
-	if total > 0 && done == total {
-		s.RecordMax("longest_plan", total)
-		touched = true
-	}
+	pet.Update(statePath, func(s *pet.State) bool {
+		touched := false
 
-	previous := h.Done
-	h.Done = done
-	if done > previous {
-		// sniper: "8 tasks closed with a single tool".
-		if len(toolsUsed(toolsPath)) == 1 {
-			s.Bump("single_tool_tasks", 1)
+		// oracle: "5 plans written before touching code". A plan is a TodoWrite
+		// with several tasks and none closed; it only counts while nothing is
+		// edited yet.
+		if pending >= planMinTasks && done == 0 && h.Code == 0 && h.PlanCounted == 0 {
+			h.PlanCounted = 1
+			s.Bump("plans_before_code", 1)
+			touched = true
 		}
-		pet.DecayHunger(s, now)
-		pet.Feed(s, "task", truncate(lastDone, 40), now)
-		touched = true
-	}
 
-	if touched {
-		pet.Save(s, statePath)
-	}
+		// cartographer: the longest plan closed in full.
+		if total > 0 && done == total {
+			s.RecordMax("longest_plan", total)
+			touched = true
+		}
+
+		previous := h.Done
+		h.Done = done
+		if done > previous {
+			// sniper: "8 tasks closed with a single tool".
+			if soleTool {
+				s.Bump("single_tool_tasks", 1)
+			}
+			pet.DecayHunger(s, now)
+			pet.Feed(s, "task", truncate(lastDone, 40), now)
+			touched = true
+		}
+
+		return touched
+	})
 }
 
 func truncate(s string, n int) string {
@@ -280,10 +328,6 @@ func handleBash(payload map[string]any, h *hookState, statePath string, now time
 	failed, _ := response["is_error"].(bool)
 
 	if !failed && IsCommit(command) && !SaidNothingCommitted(text) {
-		s := pet.Load(statePath)
-		if n, ok := FilesChangedCount(text); ok {
-			s.RecordMax("widest_commit", n)
-		}
 		cwd := str(payload["cwd"])
 		if cwd == "" {
 			cwd = str(input["cwd"])
@@ -292,13 +336,23 @@ func handleBash(payload map[string]any, h *hookState, statePath string, now time
 			cwd = "."
 		}
 		// jardinero, in the original: the commit is already made, so git is
-		// asked instead of guessing from the message.
-		if IsDocsCommit(gitNumstat(cwd)) {
-			s.MarkDay("docs", now)
-		}
-		pet.DecayHunger(s, now)
-		pet.Feed(s, "commit", CommitRef(text), now)
-		pet.Save(s, statePath)
+		// asked instead of guessing from the message. Asked BEFORE the lock is
+		// taken: it forks git, which is worth up to three seconds, and no other
+		// writer should wait behind that.
+		docs := IsDocsCommit(gitNumstat(cwd))
+		width, hasWidth := FilesChangedCount(text)
+
+		pet.Update(statePath, func(s *pet.State) bool {
+			if hasWidth {
+				s.RecordMax("widest_commit", width)
+			}
+			if docs {
+				s.MarkDay("docs", now)
+			}
+			pet.DecayHunger(s, now)
+			pet.Feed(s, "commit", CommitRef(text), now)
+			return true
+		})
 		return
 	}
 
@@ -313,21 +367,24 @@ func handleBash(payload map[string]any, h *hookState, statePath string, now time
 		return
 	}
 
-	s := pet.Load(statePath)
-	if h.Red != 0 {
-		h.Red = 0
-		s.Bump("repro_before_fix", 1)
-	}
-	// The red -> green cycle above is credited either way: reproducing a bug
-	// is worth recording even when the suite itself does not pay out.
-	if h.Edited == 0 {
-		pet.Save(s, statePath)
-		return
-	}
+	repro := h.Red != 0
+	h.Red = 0
+	paid := h.Edited != 0
 	h.Edited = 0
-	pet.DecayHunger(s, now)
-	pet.Feed(s, "tests", "", now)
-	pet.Save(s, statePath)
+
+	pet.Update(statePath, func(s *pet.State) bool {
+		if repro {
+			s.Bump("repro_before_fix", 1)
+		}
+		// The red -> green cycle above is credited either way: reproducing a
+		// bug is worth recording even when the suite itself does not pay out.
+		if !paid {
+			return true
+		}
+		pet.DecayHunger(s, now)
+		pet.Feed(s, "tests", "", now)
+		return true
+	})
 }
 
 // CloseSession turns facts only the statusline can see - usage peak, duration,
@@ -351,69 +408,72 @@ func CloseSession(factsPath, statePath string, now time.Time) {
 		}
 	}
 
-	s := pet.Load(statePath)
-	// These three are named for the context and mean it, so they read the
-	// context's own peak - not the neck, which is whichever of the three
-	// consumptions was tightest.
-	if facts.CtxPeak < 40 {
-		s.Bump("sessions_under_40", 1)
-	}
-	if facts.CtxPeak < 60 {
-		s.Bump("ctx_low", 1)
-	}
-	// The mirror of ctx_low, and the only way the ember branch can be reached
-	// at all. Its counter used to come from ONE place - blowing the context -
-	// and that is the single meal that TAKES XP away, so the arithmetic was
-	// closed: every point of "impulsive" cost 15 XP, and every meal that paid
-	// it back fed a rival counter. Somebody who blew the context all day ended
-	// up at 800 impulsive and still stuck on level 1 at zero XP, with a third
-	// of the tree behind a branch nobody could take.
-	//
-	// The canvas asks for "tira al límite sin frenar", which is a session
-	// spent high up, not a session that crashed. So it is the peak that pays.
-	if facts.Peak >= ImpulsivePeak {
-		s.Bump("impulsive", 1)
-	}
-	// ctx_maxed picks `feral` at level 3, and it had the same closed arithmetic
-	// `impulsive` had: its only source was the overflow, the one meal that
-	// TAKES XP away, so every point of it cost 15 XP while every meal that paid
-	// that back fed a rival counter. Its two siblings - short_sessions and
-	// long_sessions - cost nothing at all, so the branch could not be climbed.
-	//
-	// Now the three counters that read the ember branch are three notches of
-	// one gesture, and none of them is paid for in XP: 85 says you worked high
-	// up, 95 says you did it without easing off, 100 says you hit the wall.
-	if facts.Peak >= FeralPeak {
-		s.Bump("ctx_maxed", 1)
-	}
-	if facts.CtxPeak >= 99.999 {
-		s.Bump("ctx100_sessions", 1)
-	}
-	if duration >= 0 && duration < 15*60 {
-		s.Bump("short_sessions", 1)
-		s.Bump("sessions_15min", 1)
-	}
-	if duration >= 4*3600 {
-		s.Bump("long_sessions", 1)
-		s.Bump("sessions_4h", 1)
-	} else if duration >= 90*60 {
-		s.Bump("long_sessions", 1)
-	}
-
-	// "5 days running in the same repo": only the day change counts.
-	if facts.Repo != "" {
-		stamp := facts.Repo + "|" + pet.Today(now)
-		if s.RepoDay != stamp {
-			if s.RepoDay == facts.Repo+"|"+pet.Yesterday(now) {
-				s.Counters["same_repo_days"]++
-			} else {
-				s.Counters["same_repo_days"] = 1
-			}
-			s.RepoDay = stamp
+	pet.Update(statePath, func(s *pet.State) bool {
+		// Every one of these is named for the context and means it. They used to
+		// have to say so, because for a while there was a second peak beside this
+		// one - the tightest of context, 5h and 7d - and two of the five read it by
+		// mistake: a 5h quota at 96 paid out `feral` to somebody whose window never
+		// passed 30. There is one peak again.
+		if facts.CtxPeak < 40 {
+			s.Bump("sessions_under_40", 1)
 		}
-	}
+		if facts.CtxPeak < 60 {
+			s.Bump("ctx_low", 1)
+		}
+		// The mirror of ctx_low, and the only way the ember branch can be reached
+		// at all. Its counter used to come from ONE place - blowing the context -
+		// and that is the single meal that TAKES XP away, so the arithmetic was
+		// closed: every point of "impulsive" cost 15 XP, and every meal that paid
+		// it back fed a rival counter. Somebody who blew the context all day ended
+		// up at 800 impulsive and still stuck on level 1 at zero XP, with a third
+		// of the tree behind a branch nobody could take.
+		//
+		// The canvas asks for "tira al límite sin frenar", which is a session
+		// spent high up, not a session that crashed. So it is the peak that pays.
+		if facts.CtxPeak >= ImpulsivePeak {
+			s.Bump("impulsive", 1)
+		}
+		// ctx_maxed picks `feral` at level 3, and it had the same closed arithmetic
+		// `impulsive` had: its only source was the overflow, the one meal that
+		// TAKES XP away, so every point of it cost 15 XP while every meal that paid
+		// that back fed a rival counter. Its two siblings - short_sessions and
+		// long_sessions - cost nothing at all, so the branch could not be climbed.
+		//
+		// Now the three counters that read the ember branch are three notches of
+		// one gesture, and none of them is paid for in XP: 85 says you worked high
+		// up, 95 says you did it without easing off, 100 says you hit the wall.
+		if facts.CtxPeak >= FeralPeak {
+			s.Bump("ctx_maxed", 1)
+		}
+		if facts.CtxPeak >= 99.999 {
+			s.Bump("ctx100_sessions", 1)
+		}
+		if duration >= 0 && duration < 15*60 {
+			s.Bump("short_sessions", 1)
+			s.Bump("sessions_15min", 1)
+		}
+		if duration >= 4*3600 {
+			s.Bump("long_sessions", 1)
+			s.Bump("sessions_4h", 1)
+		} else if duration >= 90*60 {
+			s.Bump("long_sessions", 1)
+		}
 
-	s.HungerPeak = s.Hunger
-	pet.Save(s, statePath)
+		// "5 days running in the same repo": only the day change counts.
+		if facts.Repo != "" {
+			stamp := facts.Repo + "|" + pet.Today(now)
+			if s.RepoDay != stamp {
+				if s.RepoDay == facts.Repo+"|"+pet.Yesterday(now) {
+					s.Counters["same_repo_days"]++
+				} else {
+					s.Counters["same_repo_days"] = 1
+				}
+				s.RepoDay = stamp
+			}
+		}
+
+		s.HungerPeak = s.Hunger
+		return true
+	})
 	os.Remove(factsPath)
 }

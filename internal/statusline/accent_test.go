@@ -4,8 +4,10 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gabriel-diagram/claude-code-themes/internal/pet"
+	"github.com/gabriel-diagram/claude-code-themes/internal/session"
 	"github.com/gabriel-diagram/claude-code-themes/internal/theme"
 )
 
@@ -114,6 +116,19 @@ func TestThePillStaysLegibleOnEveryStepOfEveryRamp(t *testing.T) {
 
 // --- the rung, on the way to disk -------------------------------------------
 
+// xpFor is the XP that opens a level, read off pet.Levels rather than written
+// down: these tests only care that the pet is AT level 5 or 6, not what that
+// costs this week.
+func xpFor(level int) int {
+	best := 0
+	for _, l := range pet.Levels {
+		if l.Level <= level && l.XP > best {
+			best = l.XP
+		}
+	}
+	return best
+}
+
 // RenderCard persists nothing, so a RememberForm call in there would have
 // mutated a state nobody writes - which is how the first version of this went
 // in, silently doing nothing. RememberShape owns the write, and these pin both
@@ -122,7 +137,7 @@ func TestThePillStaysLegibleOnEveryStepOfEveryRamp(t *testing.T) {
 func TestTheRungIsWrittenToTheFile(t *testing.T) {
 	path := t.TempDir() + "/pet.json"
 	s := pet.New()
-	s.XP = 1900
+	s.XP = xpFor(6)
 	s.Counters = map[string]int{"inquisitive": 20, "tests": 20, "test_streak": pet.TitleAsks["wasp"]}
 	pet.Save(s, path)
 
@@ -149,7 +164,7 @@ func TestTheRungIsWrittenToTheFile(t *testing.T) {
 func TestTheRungIsNotRewrittenOnEveryRefresh(t *testing.T) {
 	path := t.TempDir() + "/pet.json"
 	s := pet.New()
-	s.XP = 900
+	s.XP = xpFor(5)
 	s.Counters = map[string]int{"inquisitive": 20, "tests": 20, "test_streak": 20}
 	pet.Save(s, path)
 
@@ -180,7 +195,7 @@ func TestTheRungIsNotRewrittenOnEveryRefresh(t *testing.T) {
 func TestALateralMoveIsWrittenTo(t *testing.T) {
 	path := t.TempDir() + "/pet.json"
 	s := pet.New()
-	s.XP = 900
+	s.XP = xpFor(5)
 	s.Counters = map[string]int{"inquisitive": 20, "tests": 20, "test_streak": 20}
 	pet.Save(s, path)
 	if got := pet.Load(path).FormSeen; got != "exterminator" {
@@ -219,7 +234,7 @@ func TestALateralMoveIsWrittenTo(t *testing.T) {
 func TestAFallenWalkNeverLowersTheStoredRung(t *testing.T) {
 	path := t.TempDir() + "/pet.json"
 	s := pet.New()
-	s.XP = 1900
+	s.XP = xpFor(6)
 	s.Counters = map[string]int{"inquisitive": 20, "tests": 20, "test_streak": pet.TitleAsks["wasp"]}
 	pet.Save(s, path)
 	if got := pet.Load(path).FormSeen; got != "wasp" {
@@ -237,5 +252,117 @@ func TestAFallenWalkNeverLowersTheStoredRung(t *testing.T) {
 	}
 	if got, _ := pet.CurrentForm(pet.Load(path)); got != "wasp" {
 		t.Errorf("tras la caida el bicho es %s", got)
+	}
+}
+
+// --- the bracket: where the pet is heading ----------------------------------
+
+func TestTheBracketNamesTheRipestSibling(t *testing.T) {
+	// The stretch this was built for: level 4, both marks still out of reach,
+	// and the habit that decides between them already leaning one way. The
+	// band used to print "cazabugs nivel 4" for the whole climb.
+	path := t.TempDir() + "/pet.json"
+	s := pet.New()
+	s.XP = xpFor(4)
+	s.Counters = map[string]int{
+		"inquisitive": 20, "tests": 20, // spark -> probe -> bughunter
+		"repro_before_fix": 23, // bloodhound asks 10
+		"test_streak":      1,  // exterminator asks 15
+	}
+	pet.Save(s, path)
+
+	card, _ := RenderCard(&Payload{Model: "M", ContextPc: ptr(7)},
+		session.Facts{}, rateFacts{}, false, false, path, time.Now())
+	if card.Form != "cazabugs" || card.Level != 4 {
+		t.Fatalf("the pet is %s/%d, want cazabugs/4", card.Form, card.Level)
+	}
+	if card.Toward != "sabueso" {
+		t.Errorf("heading for %q, want sabueso", card.Toward)
+	}
+	band := theme.Strip(assemble(petBand(card, 140), 140))
+	if !strings.Contains(band, "cazabugs[sabueso]") {
+		t.Errorf("band 4 is %q", band)
+	}
+}
+
+func TestRipenessIsRelativeNotAbsolute(t *testing.T) {
+	// 14 of 15 is further along than 23 of 10 in raw count and NOT in
+	// ripeness, which is the ranking the tree itself uses. The bracket has to
+	// name the same winner the walk would, or it is a forecast of nothing.
+	path := t.TempDir() + "/pet.json"
+	s := pet.New()
+	s.XP = xpFor(4)
+	s.Counters = map[string]int{
+		"inquisitive": 20, "tests": 20,
+		"repro_before_fix": 23, // 2.3 of its threshold
+		"test_streak":      14, // 0.93 of its own
+	}
+	pet.Save(s, path)
+
+	card, _ := RenderCard(&Payload{Model: "M", ContextPc: ptr(7)},
+		session.Facts{}, rateFacts{}, false, false, path, time.Now())
+	if card.Toward != "sabueso" {
+		t.Errorf("the raw count won: heading for %q, want sabueso", card.Toward)
+	}
+}
+
+func TestNothingUnderWayShowsNoBracket(t *testing.T) {
+	// Both habits at zero is not a direction. A bracket there would be the
+	// tie-break order dressed up as a reading.
+	path := t.TempDir() + "/pet.json"
+	s := pet.New()
+	s.XP = xpFor(4)
+	s.Counters = map[string]int{"inquisitive": 20, "tests": 20}
+	pet.Save(s, path)
+
+	card, _ := RenderCard(&Payload{Model: "M", ContextPc: ptr(7)},
+		session.Facts{}, rateFacts{}, false, false, path, time.Now())
+	if card.Toward != "" {
+		t.Errorf("it claims to be heading for %q with both habits at zero", card.Toward)
+	}
+	if band := theme.Strip(assemble(petBand(card, 140), 140)); strings.Contains(band, "[") {
+		t.Errorf("band 4 drew an empty bracket: %q", band)
+	}
+}
+
+func TestAWornMarkPointsAtItsTitle(t *testing.T) {
+	// With the mark on, the bracket moves one rung along: sabueso[lobo]. The
+	// title asks for the same habit three times over, so there is always
+	// something under way by the time the mark is worn.
+	path := t.TempDir() + "/pet.json"
+	s := pet.New()
+	s.XP = xpFor(5)
+	s.Counters = map[string]int{
+		"inquisitive": 20, "tests": 20,
+		"repro_before_fix": pet.Unlocks["bloodhound"].Threshold,
+	}
+	pet.Save(s, path)
+
+	card, _ := RenderCard(&Payload{Model: "M", ContextPc: ptr(7)},
+		session.Facts{}, rateFacts{}, false, false, path, time.Now())
+	if card.Form != "sabueso" {
+		t.Fatalf("the pet is %s, want sabueso", card.Form)
+	}
+	if card.Toward != "lobo" {
+		t.Errorf("heading for %q, want lobo", card.Toward)
+	}
+}
+
+func TestTheBracketGoesBeforeTheStateWhenColumnsRunOut(t *testing.T) {
+	// A forecast is the first thing to give up its columns after the bubble:
+	// what the pet IS and how it feels outrank where it is going.
+	card := Card{Form: "cazabugs", Toward: "sabueso", Level: 4,
+		State: "fresca", Vital: pet.StateFor(7), Bubble: "algo"}
+
+	full := theme.Strip(assemble(petBand(card, 140), 140))
+	if !strings.Contains(full, "cazabugs[sabueso]") || !strings.Contains(full, "fresca") {
+		t.Fatalf("the wide band is missing something: %q", full)
+	}
+	tight := theme.Strip(assemble(petBand(card, 140), 26))
+	if strings.Contains(tight, "[") {
+		t.Errorf("the bracket outlived the squeeze: %q", tight)
+	}
+	if !strings.Contains(tight, "fresca") {
+		t.Errorf("the state went before the bracket did: %q", tight)
 	}
 }

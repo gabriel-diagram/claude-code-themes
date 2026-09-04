@@ -119,6 +119,13 @@ func Run(stdin io.Reader, stdout io.Writer) error {
 		leftWidth = width - (cardWidth + cardGap)
 	}
 
+	// The working tree, behind its cache. Out here rather than in Parse
+	// because it is the one part of the git reading worth paying for at most
+	// once every dirtyTTL; the branch itself came out of .git/HEAD for free.
+	if p.Root != "" {
+		p.Dirty = dirtyOf(p.Root, p.SessionID, now)
+	}
+
 	factsPath := session.PathFor(p.SessionID, "")
 	facts := session.Load(factsPath)
 	rate := measureRate(p, facts, float64(now.UnixNano())/1e9)

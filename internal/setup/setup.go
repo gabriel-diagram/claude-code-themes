@@ -98,7 +98,17 @@ func save(doc map[string]any, path string) error {
 	return nil
 }
 
-// Backup copies settings.json aside before it is touched.
+// keptBackups is how many copies of settings.json survive. Every On, Off,
+// Install and Uninstall used to leave one behind for ever, and a file whose
+// whole job is "the version before this one" does not need a hundred of them.
+const keptBackups = 5
+
+// Backup copies settings.json aside before it is touched, and drops the oldest
+// copies past keptBackups.
+//
+// An empty path with a nil error means there was nothing to copy - no
+// settings.json yet - which is not a failure. Any other error is one, and the
+// callers must not write over a file they failed to copy.
 func Backup(path string) (string, error) {
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -108,7 +118,49 @@ func Backup(path string) (string, error) {
 		return "", err
 	}
 	copyPath := path + ".bak." + time.Now().Format("20060102-150405")
-	return copyPath, os.WriteFile(copyPath, raw, 0o600)
+	if err := os.WriteFile(copyPath, raw, 0o600); err != nil {
+		return "", err
+	}
+	pruneBackups(path)
+	return copyPath, nil
+}
+
+// pruneBackups keeps the newest keptBackups copies and deletes the rest. The
+// names are timestamps in a sortable format, so lexical order is chronological.
+// Best-effort: a copy that will not delete is not worth failing an install for.
+func pruneBackups(path string) {
+	found, err := filepath.Glob(path + ".bak.*")
+	if err != nil || len(found) <= keptBackups {
+		return
+	}
+	var files []string
+	for _, f := range found {
+		if info, err := os.Lstat(f); err == nil && info.Mode().IsRegular() {
+			files = append(files, f)
+		}
+	}
+	if len(files) <= keptBackups {
+		return
+	}
+	sort.Strings(files)
+	for _, old := range files[:len(files)-keptBackups] {
+		os.Remove(old)
+	}
+}
+
+// backupOrStop makes the copy and says whether the caller may go on. A failure
+// is REPORTED, not swallowed: this file carries the user's model, permissions
+// and MCP servers, and rewriting it with no copy behind it because the copy
+// failed is the one outcome nobody would have chosen.
+func backupOrStop(out io.Writer, path string) error {
+	copyPath, err := Backup(path)
+	if err != nil {
+		return fmt.Errorf("no he podido copiar %s (%w): no lo toco", tilde(path), err)
+	}
+	if copyPath != "" {
+		fmt.Fprintf(out, "copia de seguridad: %s\n", copyPath)
+	}
+	return nil
 }
 
 // tilde shortens a path under the home directory, so settings.json stays
@@ -149,6 +201,27 @@ func statusLineEntry(root string) map[string]any {
 	}
 }
 
+// anyOfOurs says whether a list of hook groups carries one of ours.
+func anyOfOurs(groups []any) bool {
+	for _, g := range groups {
+		group, ok := g.(map[string]any)
+		if !ok {
+			continue
+		}
+		entries, _ := group["hooks"].([]any)
+		for _, e := range entries {
+			entry, ok := e.(map[string]any)
+			if !ok {
+				continue
+			}
+			if cmd, _ := entry["command"].(string); strings.Contains(cmd, hookMark) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func dropOurHooks(doc map[string]any) {
 	hooks, ok := doc["hooks"].(map[string]any)
 	if !ok {
@@ -161,23 +234,7 @@ func dropOurHooks(doc map[string]any) {
 		}
 		kept := make([]any, 0, len(groups))
 		for _, g := range groups {
-			group, ok := g.(map[string]any)
-			if !ok {
-				kept = append(kept, g)
-				continue
-			}
-			entries, _ := group["hooks"].([]any)
-			ours := false
-			for _, e := range entries {
-				entry, ok := e.(map[string]any)
-				if !ok {
-					continue
-				}
-				if cmd, _ := entry["command"].(string); strings.Contains(cmd, hookMark) {
-					ours = true
-				}
-			}
-			if !ours {
+			if !anyOfOurs([]any{g}) {
 				kept = append(kept, g)
 			}
 		}
@@ -199,8 +256,8 @@ func On(out io.Writer, root string) error {
 	if err != nil {
 		return fmt.Errorf("settings.json unreadable (%w): leaving it alone", err)
 	}
-	if copyPath, err := Backup(path); err == nil && copyPath != "" {
-		fmt.Fprintf(out, "copia de seguridad: %s\n", copyPath)
+	if err := backupOrStop(out, path); err != nil {
+		return err
 	}
 	doc["statusLine"] = statusLineEntry(root)
 	if err := save(doc, path); err != nil {
@@ -222,8 +279,8 @@ func Off(out io.Writer) error {
 		fmt.Fprintln(out, "la statusline ya estaba apagada")
 		return nil
 	}
-	if copyPath, err := Backup(path); err == nil && copyPath != "" {
-		fmt.Fprintf(out, "copia de seguridad: %s\n", copyPath)
+	if err := backupOrStop(out, path); err != nil {
+		return err
 	}
 	delete(doc, "statusLine")
 	if err := save(doc, path); err != nil {
@@ -244,19 +301,15 @@ func Status(out io.Writer) error {
 	} else {
 		fmt.Fprintln(out, "statusline: apagada")
 	}
+	// One name per EVENT. Appending inside the innermost loop named an event
+	// once per entry, so a file carrying two of our hooks under PostToolUse
+	// reported "PostToolUse, PostToolUse".
 	var wired []string
 	if hooks, ok := doc["hooks"].(map[string]any); ok {
 		for event, raw := range hooks {
 			groups, _ := raw.([]any)
-			for _, g := range groups {
-				group, _ := g.(map[string]any)
-				entries, _ := group["hooks"].([]any)
-				for _, e := range entries {
-					entry, _ := e.(map[string]any)
-					if cmd, _ := entry["command"].(string); strings.Contains(cmd, hookMark) {
-						wired = append(wired, event)
-					}
-				}
+			if anyOfOurs(groups) {
+				wired = append(wired, event)
 			}
 		}
 	}
@@ -277,8 +330,8 @@ func Install(out io.Writer, root string, withHooks bool) error {
 	if err != nil {
 		return fmt.Errorf("settings.json unreadable (%w): leaving it alone", err)
 	}
-	if copyPath, err := Backup(path); err == nil && copyPath != "" {
-		fmt.Fprintf(out, "  copia de seguridad: %s\n", copyPath)
+	if err := backupOrStop(out, path); err != nil {
+		return err
 	}
 
 	doc["statusLine"] = statusLineEntry(root)
@@ -320,13 +373,14 @@ func Uninstall(out io.Writer) error {
 	path := SettingsPath()
 	doc, err := load(path)
 	if err != nil {
-		// Warned and carried on: if this aborted, the caller's `set -e` would
-		// delete no files and there would be no way to uninstall without
-		// hand-editing json.
+		// Reported, and the CALLER carries on: install.sh runs this with a
+		// `|| echo` so its `set -e` does not stop, and goes on to delete the
+		// files. Without that, an unreadable settings.json would mean no way
+		// to uninstall at all short of hand-editing json.
 		return fmt.Errorf("cannot touch settings.json (%w)", err)
 	}
-	if copyPath, err := Backup(path); err == nil && copyPath != "" {
-		fmt.Fprintf(out, "  copia de seguridad: %s\n", copyPath)
+	if err := backupOrStop(out, path); err != nil {
+		return err
 	}
 	delete(doc, "statusLine")
 	dropOurHooks(doc)
