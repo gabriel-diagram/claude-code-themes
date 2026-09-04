@@ -343,6 +343,12 @@ contexto es lo único que te para de verdad — y no toca ningún otro estado.
 > **cuello más apretado** —lo que medía la primera versión—, que llega a 100 él
 > solo, así que la puerta sobraba y se fue con ella. Ver
 > [design/vitals.md](design/vitals.md).
+>
+> **Y una tercera.** El cuello tampoco se quedó. Las cuotas de 5h y 7d son de la
+> **cuenta**, no de la sesión, así que todas las ventanas abiertas leían el mismo
+> número y el bicho dejaba de describir la suya. El uso es ahora el contexto de
+> la sesión y nada más; el k.o. sigue sin necesitar puerta, porque el contexto
+> llega al 100 él solo igual que el cuello.
 
 ### 6 · La calma es el defecto
 

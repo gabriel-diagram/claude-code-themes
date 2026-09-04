@@ -138,24 +138,66 @@ en su propio id: un nombre que falta es un nombre por elegir, no un fallo.
 
 Cuál de las dos marcas te toca no lo decide la XP sino el **hábito**: se
 desbloquean al cumplir su condición estando en la evolución padre. La XP sigue
-poniendo el *cuándo* —son formas de nivel 5, y el nivel 5 son 900— pero ya no
-reparte nada: a partir de ahí lo único que se mueve es el hábito, y es eso lo
-que mide la barra en la banda 4 y la fila `marca` de `/pet`.
+poniendo el *cuándo* —son formas de nivel 5— pero ya no reparte nada: a partir
+de ahí lo único que se mueve es el hábito, y es eso lo que mide la barra en la
+banda 4 y la fila `marca` de `/pet`.
 
-| Nivel | XP | Qué eres |
-| --- | --- | --- |
-| 1 | 0 | larva — `spark`, sin patas todavía |
-| 2 | 60 | temperamento — cómo trabajas |
-| 3 | 180 | oficio — en qué eres bueno |
-| 4 | 400 | el mismo oficio, asentado |
-| 5 | 900 | marca — más la condición de hábito, o una secreta ya ganada |
+| Nivel | XP | Tramo | Qué eres |
+| --- | --- | --- | --- |
+| 1 | 0 | — | larva — `spark`, sin patas todavía |
+| 2 | 60 | 60 | temperamento — cómo trabajas |
+| 3 | 180 | 120 | oficio — en qué eres bueno |
+| 4 | 400 | 220 | el mismo oficio, asentado |
+| 5 | 2000 | **1600** | marca — más la condición de hábito, o una secreta ya ganada |
+| 6 | 4500 | 2500 | título — la forma final de la rama |
+
+### Por qué el nivel 4 es tan largo
+
+El árbol **solo se bifurca en los niveles 2, 3 y 5**. El 4 no reparte nada: es
+el mismo oficio, asentado. Eso lo convierte en el único tramo donde el hábito
+que decide la marca sigue moviéndose y **todavía puede cambiar de idea** — un
+`cazabugs` que empieza a reproducir fallos antes de arreglarlos se escora a
+`sabueso`, uno que encadena suites verdes se escora a `exterminador`, y
+cualquiera de los dos puede adelantar al otro mientras dure el nivel.
+
+Duraba 500 XP. Medido contra un día real de comidas —unos 12 XP por comida, del
+orden de 60 a la hora de trabajo efectivo— eso son **ocho horas**: una sesión
+larga, y la bifurcación decidida antes de que los hábitos hubieran tenido una
+semana para decir nada. Con 1600 el tramo ronda las **veinticinco horas** de
+trabajo.
+
+Estirarlo solo funciona si la espera se puede leer, y por eso el tramo largo
+llega junto con los corchetes de la banda 4 (ver abajo): el nivel 4 ya no es un
+número subiendo en silencio.
+
+### Hacia dónde va: `cazabugs[sabueso]`
+
+La banda 4 escribe la marca a la que apuntas entre corchetes, pegada al nombre:
+
+```
+cazabugs[sabueso] nivel 4 │ fresca ✦
+```
+
+Sale de `pet.NextMark`, que es exactamente la misma cuenta que hará el árbol al
+llegar a nivel 5: de las marcas hermanas, la de **hábito más maduro** —`hecho /
+umbral`, sin tope, así que 23 de 10 gana a 14 de 15—. Antes solo se enseñaba
+cuando ya no quedaba nivel por encima, es decir cuando ya no servía para
+decidir nada.
+
+**Los corchetes son el tiempo verbal.** Un nombre a secas dice *es*; un
+corchete dice *va hacia*, y eso es lo único honesto que se puede decir de una
+previsión: los contadores siguen moviéndose, una hermana puede adelantar, y una
+secreta cancela la rama entera. Están vacíos cuando no hay nada en marcha —los
+dos hábitos a cero no apuntan a ningún sitio— y cuando el bicho ya lleva
+título, que no tiene nada detrás. Con la marca puesta pasan a señalar el
+título: `sabueso[lobo]`.
 
 Y dos secretas fuera del árbol: **phoenix** / *fénix* (llegar a hambre 10 y
 remontar a 0 en la misma sesión, solo desde `feral` o `marathon`) y **chimera** /
 *quimera* (dos temperamentos empatados al subir a nivel 4; hereda ojos de uno y
 cuerpo del otro).
 
-Las dos son formas de **nivel 5** y esperan a los 900 XP como cualquier otra. La
+Las dos son formas de **nivel 5** y esperan a los 2000 XP como cualquier otra. La
 condición se cumple antes —la de la quimera, a nivel 4— y entre una cosa y la
 otra el panel dice a qué aspiras: `488 para quimera`. Entregarla en el acto se
 saltaba el nivel 4 entero y ponía un «nivel 5» al lado de 412 XP.
@@ -214,9 +256,11 @@ se repita en nueve segundos puede valer un quinceavo de nivel.
 
 Van dos frenos, porque resuelven cosas distintas:
 
-- **Una cada hora.** No es un número al azar: el lienzo presupuesta el nivel 5
+- **Una cada hora.** No es un número al azar: el lienzo presupuestaba el nivel 5
   en «una semana de uso normal», o sea unos 128 XP al día, y ocho suites verdes
-  en una jornada son exactamente eso.
+  en una jornada son exactamente eso. El freno sigue calibrado ahí; lo que ha
+  cambiado es el destino, no el ritmo — el nivel 5 se alejó a propósito para
+  que la bifurcación del hábito tenga tiempo de decidirse.
 - **Y con un cambio detrás.** Una suite que pasa sin que hayas editado nada no
   es trabajo, es la misma suite otra vez. El hook ya sabía qué herramientas se
   usan, así que le basta con recordar si hubo un `Edit` desde la última vez que
@@ -249,8 +293,15 @@ baja la forma—; lo que faltaba era que algo restase de verdad:
   Sin él la XP era un foso. Con 1641 puntos y el tope en 900 hacían falta
   cincuenta contextos reventados para bajar un nivel, así que cualquier castigo
   se ahogaba en el colchón antes de significar nada.
-- **El hambre al tope drena.** Medio día fuera no cuesta nada; a los **tres
-  días** se pierde el nivel 5, y hacia las seis semanas se vuelve a larva.
+- **El hambre al tope drena.** Medio día fuera no cuesta nada; a los **dos días
+  y medio** se pierde el último nivel. Ese número no se mueve al tocar la
+  escalera, porque el techo se define *relativo* al último umbral: son las 60
+  horas del tramo de nivel 1, siempre.
+
+  Caer del todo, en cambio, sí escala con la escalera, y ahora son **190 días**
+  —antes eran unos 80—. La doc decía «seis semanas» y ya llevaba tiempo sin ser
+  verdad. Si 190 días parece demasiado indulgente, lo que hay que mover es
+  `StarveXP`, no el techo.
 
 Las cifras viven en `StarveXP` y `XPCeiling`, y hay un test
 (`TestTheCostOfNeglectIsWhatWeMeantItToBe`) que discute con quien las mueva.
