@@ -9,7 +9,16 @@ xp, hambre y racha.
 Es un plugin instalable. El runtime es un binario de Go sin dependencias: ni
 `python3`, ni `node`, ni `jq`.
 
-![La statusline de cuatro bandas con el bicho a la derecha](assets/statusline.png)
+```
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Opus 5  ██████░░░░░░░░░░ 36% · 1M ctx │ xhigh │ 5h 41%  7d 13% │ 98% cache                           ▚╲   ╱▞
+claude-code-themes (main) │ +184/−37 │ $28.29 │ 1h 12m                                                ▗▟███▙▖
+criterio                                                                                             ▐█ > < █▌
+cazabugs nivel 4 │ vibrante                                                                           ▖▖▀▀▀▗▗
+```
+
+*Salida real de `ccpet statusline`, sin el color. Las cuatro bandas y el bicho a
+la derecha, en cuatro filas más la raya.*
 
 | Tema | Acento | Look |
 | --- | --- | --- |
@@ -17,7 +26,12 @@ Es un plugin instalable. El runtime es un binario de Go sin dependencias: ni
 | **Blood Red** | `#ff5c47` coral | cálido: coral, terracota, vino sobre fondo oscuro |
 | **Electric Blue** | `#2e8bff` azul | frío: cian, azure, azul profundo sobre fondo oscuro |
 
-![Electric Blue y Blood Red en Claude Code](assets/preview.png)
+![Electric Blue a la izquierda y Blood Red a la derecha, en Claude Code](assets/preview.png)
+
+*Los otros dos temas: **Electric Blue** a la izquierda (prompts, picker y selección
+en azul) y **Blood Red** a la derecha (prompts coral). La statusline que asoma en
+la esquina de esa captura es vieja; los colores del CLI, que es lo que la imagen
+enseña, siguen siendo estos.*
 
 Los tres cubren los **72 tokens** que reconoce Claude Code, no solo la docena que
 se ve de un vistazo.
