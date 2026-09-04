@@ -13,7 +13,20 @@ command -v go >/dev/null || { echo "go is required" >&2; exit 1; }
 VERSION=$(python3 -c 'import json;print(json.load(open(".claude-plugin/plugin.json"))["version"])' 2>/dev/null || echo dev)
 # -trimpath keeps build paths out of the binary; -s -w drop the symbol table and
 # DWARF, which is about a third of the size and nothing anyone needs at runtime.
-FLAGS=(-trimpath -ldflags "-s -w -X main.version=$VERSION")
+#
+# -buildvcs=false is what makes the build REPRODUCIBLE, and without it the
+# binaries could not be checked against the source at all. Go stamps the commit,
+# its timestamp and a vcs.modified flag into every binary - and bin/ is itself
+# tracked, so writing the first build dirties the tree the second one reads:
+#
+#   clean tree  -> build -> vcs.modified=false baked in
+#   bin/ written -> tree is now dirty
+#   next build  -> vcs.modified=true -> a different binary, same source
+#
+# So two builds of identical source never matched, and the CI job that recompiles
+# and compares would have failed for ever while reporting "bin/ is stale". None
+# of that stamp is wanted here anyway: the version comes in through -X.
+FLAGS=(-trimpath -buildvcs=false -ldflags "-s -w -X main.version=$VERSION")
 
 TARGETS=(linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64)
 if [ "${1:-}" = "host" ]; then
