@@ -155,12 +155,37 @@ dos contadores que el código ya lleva y el lienzo ignoraba, `bypass_turns` y
   brasa *y* abre una marca dentro de ella. Se aplana bajándole el umbral, pero
   entonces la rama feral se queda sin marca por defecto. Decisión de diseño abierta.
 
-## Lo que bloquea implementarlo
+## El atlas está completo
 
-Faltan los sprites de 32 formas (21 base, 11 títulos). `DesignSync.get_file` corta a
-256 KiB y los dos ficheros del lienzo pesan 251 y 250 KB; `WebFetch` sobre la URL del
-proyecto da 403. Lo desbloquea partir esos dos ficheros en trozos más pequeños en el
-editor de Claude Design.
+`internal/pet/testdata/ATLAS-97.json` — las 97 formas con nombre, padre, nota, color
+base, rampa de siete pasos y las siete siluetas de cinco filas. Mismo esquema que el
+`ATLAS.json` de 41 que usan los tests, que se deja intacto hasta que esto se
+implemente.
 
-`Cómo llegar a cada forma.dc.html` sí entra entero (60 KB) y de ahí salieron las 97
-reglas: ese fichero está agotado.
+Extraído del lienzo en cinco trozos (los ficheros completos superan el tope de 256
+KiB de `DesignSync.get_file`) y verificado en siete frentes:
+
+| Comprobación | Resultado |
+| --- | --- |
+| formas | 97 |
+| estructura | todas: 7 estados x 5 filas x 9 columnas, rampa de 7 |
+| árbol | 1 + 3 temperamentos + 7 oficios + 42 marcas + 42 títulos + 2 secretas |
+| contra `ATLAS.json` | 41 comunes, 40 idénticas carácter por carácter |
+| siluetas duplicadas | 0 — el lienzo promete «sin dos iguales» |
+| rampas distintas | 10 — coincide con «Ten ramps» de `ramps.go:15` |
+| variantes | 97 x 7 = 679 = 371 + 308, los dos números del lienzo |
+
+Las tres últimas no se pidieron: son afirmaciones que el lienzo y el código hacían
+por su cuenta y que se cumplen sobre datos extraídos por separado.
+
+**La única discrepancia: `diablo` está redibujado.** Misma rampa y mismo color base,
+pero tres de sus cinco filas cambian — los cuernos pasan de `^ ╲ ╱ ^` a `^^ ╲ ^^`, la
+base de `▝▙▄█▄▟▘` a `▝▙▄▀▄▟▘` y las patas se juntan. Es un cambio de diseño posterior
+al código, no un error de extracción.
+
+## Qué queda para implementarlo
+
+Ya no falta ningún dato. Queda el trabajo: `ATLAS.json` pasa a ser el de 97,
+`sprites.go`, `ramps.go`, `evolution.go` y `names.go` crecen con las 56 formas
+nuevas, los cuatro tests que hoy afirman 41 formas y 287 variantes pasan a 97 y 679,
+y hay que migrar los `pet.json` que ya lleven una marca cuya puerta cambia.
