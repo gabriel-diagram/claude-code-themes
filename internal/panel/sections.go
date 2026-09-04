@@ -19,32 +19,75 @@ import (
 // rest moved in silence: there was no way to see what a mark asked for, which
 // sibling it beat, or why a meal was refused, short of reading the source.
 
+// counterRow is one habit: its name, its number, and what that number is FOR.
+type counterRow struct {
+	label string
+	count string
+	goal  string       // "/10" when it opens something, empty when it does not
+	tint  theme.Colour // what the number is painted
+}
+
+// tintFor turns a counter's goal into a colour, and that is the whole point of
+// the colour: it MEANS something.
+//
+//	green   the threshold is met - this one is paid for, only the XP is left
+//	amber   on its way to a shape this pet can still reach
+//	white   counted, and leading nowhere from here
+//
+// The last is not a failure, it is most of the table: bypass_turns opens
+// `gremlin`, which hangs off the ember branch a probe walked past long ago.
+// Painting it like the two that are live is what made twenty-two identical
+// white numbers out of a list where a third of them matter.
+func tintFor(g pet.Goal) theme.Colour {
+	switch {
+	case g.Reached():
+		return theme.Ident
+	case g.Leads():
+		return theme.Number
+	}
+	return theme.Emph
+}
+
 // pairs lays counters out in two columns, label left, number right, so a long
 // list reads as a table instead of a paragraph.
-func pairs(b *strings.Builder, rows [][2]string, indent string) {
+func pairs(b *strings.Builder, rows []counterRow, indent string) {
 	if len(rows) == 0 {
 		return
 	}
-	dim, reset, emph := theme.Fg(theme.Dim), theme.Reset, theme.Fg(theme.Emph)
+	dim, reset := theme.Fg(theme.Dim), theme.Reset
 	// Widths from what is actually there, never hardcoded: half of these
 	// labels are short and a fixed column spends the difference on nothing.
-	labelW, numW := 0, 0
+	labelW, numW, goalW := 0, 0, 0
 	for _, r := range rows {
-		if n := theme.Width(r[0]); n > labelW {
+		if n := theme.Width(r.label); n > labelW {
 			labelW = n
 		}
-		if n := len(r[1]); n > numW {
+		if n := len(r.count); n > numW {
 			numW = n
 		}
+		if n := len(r.goal); n > goalW {
+			goalW = n
+		}
+	}
+	// pad is false for the last cell on a row: the goal column is the widest
+	// thing that may be absent, and padding it at the end of a line leaves
+	// trailing spaces that nothing can see and every diff can.
+	cell := func(r counterRow, pad bool) string {
+		goal := r.goal
+		if pad {
+			goal = fmt.Sprintf("%-*s", goalW, goal)
+		}
+		return dim + theme.PadRight(r.label, labelW) + reset +
+			" " + theme.Fg(r.tint) + fmt.Sprintf("%*s", numW, r.count) + reset +
+			dim + goal + reset
 	}
 	for i := 0; i < len(rows); i += 2 {
-		line := indent + dim + theme.PadRight(rows[i][0], labelW) + reset +
-			" " + emph + fmt.Sprintf("%*s", numW, rows[i][1]) + reset
 		if i+1 < len(rows) {
-			line += "    " + dim + theme.PadRight(rows[i+1][0], labelW) + reset +
-				" " + emph + fmt.Sprintf("%*s", numW, rows[i+1][1]) + reset
+			b.WriteString(indent + cell(rows[i], true) + "   " +
+				cell(rows[i+1], false) + "\n")
+			continue
 		}
-		b.WriteString(line + "\n")
+		b.WriteString(indent + cell(rows[i], false) + "\n")
 	}
 }
 
@@ -107,14 +150,22 @@ var sessionCounters = map[string]bool{
 }
 
 // counters prints everything the pet has counted, grouped and sorted.
-func counters(b *strings.Builder, s *pet.State) {
-	var habits, sessions [][2]string
+func counters(b *strings.Builder, s *pet.State, form string) {
+	var habits, sessions []counterRow
 	for _, name := range sortedKeys(s.Counters) {
 		v := s.Counters[name]
 		if v == 0 {
 			continue // a counter at zero is a habit that has not started
 		}
-		row := [2]string{pet.CounterName(name), strconv.Itoa(v)}
+		goal := pet.GoalOf(s, form, name)
+		row := counterRow{
+			label: pet.CounterName(name),
+			count: strconv.Itoa(v),
+			tint:  tintFor(goal),
+		}
+		if goal.Leads() {
+			row.goal = "/" + strconv.Itoa(goal.Threshold)
+		}
 		if sessionCounters[name] {
 			sessions = append(sessions, row)
 		} else {
@@ -122,8 +173,14 @@ func counters(b *strings.Builder, s *pet.State) {
 		}
 	}
 	dim, reset := theme.Fg(theme.Dim), theme.Reset
+	// The key, once, so the colour does not have to be guessed. Cheap enough
+	// at one line, and without it the three tints are decoration.
+	legend := "  " + dim + "· " + reset +
+		theme.Fg(theme.Ident) + "cumplido" + reset + dim + "  ·  " + reset +
+		theme.Fg(theme.Number) + "en camino" + reset + dim + "  ·  " + reset +
+		theme.Fg(theme.Emph) + "no lleva a nada desde aquí" + reset
 	if len(habits) > 0 {
-		b.WriteString("\n  " + dim + "hábitos" + reset + "\n")
+		b.WriteString("\n  " + dim + "hábitos" + reset + legend + "\n")
 		pairs(b, habits, "    ")
 	}
 	if len(sessions) > 0 {

@@ -338,7 +338,7 @@ func showPanel(out io.Writer, statePath string, now time.Time) int {
 	}
 
 	theFork(&b, s, form)
-	counters(&b, s)
+	counters(&b, s, form)
 	larder(&b, s, now)
 
 	// The whole log, not the last eight of today. It is capped at LogMax and

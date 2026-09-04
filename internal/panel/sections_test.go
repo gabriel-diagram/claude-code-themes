@@ -147,21 +147,92 @@ func TestTheXPRowIsTheTotalAndTheTarget(t *testing.T) {
 	}
 }
 
-// While the fork is open its section carries the habit, with both runners in
-// it. The summary row would say the same thing once, capped: "10/10" beside
-// the section's "33/10" is one habit twice, disagreeing with itself.
-func TestTheHabitRowDoesNotRepeatTheForkSection(t *testing.T) {
+// The bug was never that a habit appears twice - the fork section is a race
+// and the habits table is an inventory, and the same number can answer both
+// questions. It was that the two DISAGREED: the summary row printed "10/10",
+// capped at the threshold, beside the section's "33/10".
+func TestTheHabitNeverContradictsItself(t *testing.T) {
 	got := panelFor(t, func(s *pet.State) {
 		s.XP = 515
 		s.Counters = map[string]int{
 			"inquisitive": 21, "tests": 21, "repro_before_fix": 33, "test_streak": 1,
 		}
 	})
-	if strings.Contains(got, "marca  ") {
-		t.Errorf("the summary repeats the fork section:\n%s", got)
+	if strings.Contains(got, "10/10") {
+		t.Errorf("a habit is printed capped at its own threshold:\n%s", got)
 	}
-	if strings.Count(got, "33/10") != 1 {
-		t.Errorf("the habit is printed %d times:\n%s", strings.Count(got, "33/10"), got)
+	if !strings.Contains(got, "33/10") {
+		t.Errorf("the real count is missing:\n%s", got)
+	}
+	// The old summary row is gone: the fork section carries it now.
+	if strings.Contains(got, "marca  ") {
+		t.Errorf("the capped summary row is back:\n%s", got)
+	}
+}
+
+// The colour is the point of the table, and it means one thing: whether this
+// counter is taking the pet anywhere it can still get to.
+//
+//	green   the threshold is met
+//	amber   on its way to a shape still ahead
+//	white   counted, and leading nowhere from here
+//
+// Most of the table is white, and that is the reading: bypass_turns opens
+// `gremlin`, off the ember branch, which a probe walked past long ago.
+func TestTheColourSaysWhetherACounterLeadsAnywhere(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pet.json")
+	s := pet.New()
+	s.XP = 515
+	s.Counters = map[string]int{
+		"inquisitive": 21, "tests": 21,
+		"repro_before_fix": 33,  // bloodhound, ahead, threshold met
+		"test_streak":      1,   // exterminator, ahead, on its way
+		"bypass_turns":     206, // gremlin, on a branch behind us
+	}
+	if !pet.Save(s, path) {
+		t.Fatal("could not write the state")
+	}
+	var out bytes.Buffer
+	showPanel(&out, path, time.Now())
+	painted := out.String()
+
+	for _, tc := range []struct {
+		label string
+		tint  theme.Colour
+		why   string
+	}{
+		{"reproducir antes de arreglar", theme.Ident, "threshold met"},
+		{"días seguidos en verde", theme.Number, "on its way"},
+		{"turnos en bypass", theme.Emph, "leads nowhere from here"},
+	} {
+		line := ""
+		for _, l := range strings.Split(painted, "\n") {
+			if strings.Contains(theme.Strip(l), tc.label) &&
+				!strings.Contains(theme.Strip(l), "marca del nivel") {
+				line = l
+			}
+		}
+		if line == "" {
+			t.Errorf("%q is not in the table", tc.label)
+			continue
+		}
+		if !strings.Contains(line, theme.Fg(tc.tint)) {
+			t.Errorf("%q (%s) is not painted as expected", tc.label, tc.why)
+		}
+	}
+}
+
+// And the key is on screen, because three tints nobody can decode are three
+// tints of decoration.
+func TestTheColourKeyIsPrinted(t *testing.T) {
+	got := panelFor(t, func(s *pet.State) {
+		s.XP = 515
+		s.Counters = map[string]int{"inquisitive": 21, "tests": 21, "repro_before_fix": 33}
+	})
+	for _, want := range []string{"cumplido", "en camino", "no lleva a nada"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the key is missing %q:\n%s", want, got)
+		}
 	}
 }
 

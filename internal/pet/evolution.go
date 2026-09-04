@@ -11,6 +11,8 @@ package pet
 // behaviour counter is highest at that moment, so the shape you end up with is
 // a readout of how you work.
 
+import "sort"
+
 // Root is the newborn form.
 const Root = "spark"
 
@@ -589,5 +591,101 @@ func Siblings(s *State, form string) []Sibling {
 		}
 		out = append(out, Sibling{child, u.Counter, done, u.Threshold})
 	}
+	return out
+}
+
+// Ahead is every form still reachable from one, itself excluded.
+//
+// The tree only ever goes down, so this is a plain walk with no cycle to
+// guard against - TestTheTreeHasNoCycles pins that.
+func Ahead(form string) map[string]bool {
+	out := map[string]bool{}
+	var walk func(string)
+	walk = func(f string) {
+		for _, child := range Tree[f] {
+			if out[child] {
+				continue
+			}
+			out[child] = true
+			walk(child)
+		}
+	}
+	walk(form)
+	return out
+}
+
+// Goal is what a counter is FOR, from where the pet is standing now.
+type Goal struct {
+	// Form is the shape the counter opens, and Threshold what it asks for.
+	// Both are zero when the counter opens nothing this pet can still reach.
+	Form      string
+	Threshold int
+	Done      int
+}
+
+// Reached says the counter has already paid for its goal.
+func (g Goal) Reached() bool { return g.Threshold > 0 && g.Done >= g.Threshold }
+
+// Leads says the counter is going somewhere at all.
+func (g Goal) Leads() bool { return g.Form != "" }
+
+// GoalOf is the nearest shape a counter still opens for this pet.
+//
+// The panel prints twenty-two counters and they are not equal: some are two
+// away from a mark, some belong to a branch this pet walked past years ago and
+// will never see again. Without this they were twenty-two identical white
+// numbers, which is a table with no information in it.
+//
+// Nearest means the mark before the title, because the mark comes first. A
+// counter whose shapes are all behind the pet gets an empty Goal - it is still
+// counted, it just no longer leads anywhere.
+func GoalOf(s *State, form, counter string) Goal {
+	ahead := Ahead(form)
+	done := s.Counters[counter]
+	if done < 0 {
+		done = 0
+	}
+	// Marks first: a mark is always closer than the title behind it.
+	for _, stage := range []func() (string, int, bool){
+		func() (string, int, bool) { return firstUnlock(ahead, counter) },
+		func() (string, int, bool) { return firstTitle(ahead, counter) },
+	} {
+		if shape, threshold, ok := stage(); ok {
+			return Goal{shape, threshold, done}
+		}
+	}
+	return Goal{Done: done}
+}
+
+func firstUnlock(ahead map[string]bool, counter string) (string, int, bool) {
+	for _, mark := range sortedForms(Unlocks) {
+		if ahead[mark] && Unlocks[mark].Counter == counter {
+			return mark, Unlocks[mark].Threshold, true
+		}
+	}
+	return "", 0, false
+}
+
+func firstTitle(ahead map[string]bool, counter string) (string, int, bool) {
+	for _, mark := range sortedForms(Unlocks) {
+		title, ok := Titles[mark]
+		if !ok || !ahead[title] || Unlocks[mark].Counter != counter {
+			continue
+		}
+		if u, ok := TitleUnlock(mark); ok {
+			return title, u.Threshold, true
+		}
+	}
+	return "", 0, false
+}
+
+// sortedForms keeps the walk deterministic: a map range would pick a different
+// mark between two refreshes when a counter opens more than one.
+func sortedForms(m map[string]Unlock) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
 	return out
 }
