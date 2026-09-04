@@ -134,12 +134,34 @@ statusline y **en cada llamada a herramienta** en el hook.
 
 | | Python | Go |
 | --- | --- | --- |
-| statusline (1 vez/segundo) | 22,4 ms | **3,5 ms** |
-| hook, camino lento (`Bash`, `Edit`, `TodoWrite`) | 21,3 ms | **1,6 ms** |
-| hook, camino rápido (todo lo demás) | 2,6 ms | **1,6 ms** |
-| panel `/pet` | 14,7 ms | **2,1 ms** |
+| statusline (1 vez/segundo) | 22,4 ms | **1,5 ms** |
+| hook, camino lento (`Bash`, `Edit`, `TodoWrite`) | 21,3 ms | **1,7 ms** |
+| hook, camino rápido (todo lo demás) | 2,6 ms | **1,5 ms** |
+| panel `/pet` | 14,7 ms | **1,4 ms** |
 
 El hook es el que importa: colgaba 21 ms de cada `Bash` y cada `Edit`.
+
+La statusline marcaba 3,5 ms en la primera medición y ahora 1,5, y la diferencia
+no es que Go corriera más: es que **la mayor parte de ese tiempo era `git`**.
+Medido por piezas, dentro de un repo:
+
+| | |
+| --- | --- |
+| leer la rama de `.git/HEAD` | **0,9 µs** |
+| `git status` para saber si el árbol está sucio (un fork) | **1,1 ms** |
+| ese mismo dato, ya en caché | **4,2 µs** |
+| el resto del refresco: parsear, medir, componer las cuatro bandas | **3,4 µs** |
+
+Con `refreshInterval: 1` eso era un fork de `git` por segundo y por sesión
+abierta, para redibujar algo que casi nunca ha cambiado. Así que las dos mitades
+se separaron: **la rama sale de leer `.git/HEAD`** —sin fork, siempre exacta,
+y de paso acierta en los tres casos que antes había que reconocer a mano
+(detached, worktree, y un repo recién creado sin ningún commit)— y solo el
+asterisco de «árbol sucio» pasa por `git`, **con tres segundos de caché**.
+
+Eso es lo único del pie que puede ir con retraso, y va con tres segundos como
+mucho: haces un commit y el ✳ tarda hasta un refresco largo en apagarse. A
+cambio, dos de cada tres refrescos no forkean nada.
 
 También desaparecieron dos cosas que solo existían para abaratar Python: el
 prefiltro de bash del hook (arrancar el intérprete costaba 15 ms, así que había
@@ -349,6 +371,27 @@ parpadeo (`_ _`) es un solo frame cada siete refrescos. Al cruzar un umbral la
 etiqueta sale en negrita un refresco — para eso guarda el estado anterior en
 `$TMPDIR/claude-statusline-<session_id>`.
 
+### Hacia dónde va
+
+La banda 4 escribe entre corchetes la marca a la que apunta el bicho, pegada al
+nombre de lo que es ahora:
+
+```
+cazabugs[sabueso] nivel 4 │ fresca ✦
+```
+
+De las dos marcas hermanas gana la de **hábito más maduro** —`hecho / umbral`,
+sin tope: 23 de 10 le gana a 14 de 15—, que es exactamente la cuenta que hará el
+árbol al llegar a nivel 5. Y es la misma que ya se usaba para la barra, solo que
+antes se enseñaba únicamente cuando ya no quedaba nivel por encima: justo cuando
+había dejado de servir para decidir nada.
+
+**El corchete es el tiempo verbal.** Un nombre a secas dice *es*; el corchete
+dice *va hacia*, que es lo único honesto sobre una previsión — los contadores
+siguen moviéndose y una hermana puede adelantar. Se vacía cuando no hay nada en
+marcha, y con la marca ya puesta pasa a señalar el título: `sabueso[lobo]`. Es
+lo primero que la banda suelta al quedarse sin columnas, después del bocadillo.
+
 ### Lo que dice
 
 El bocadillo de la banda 4 no es un chat: **por defecto calla**.
@@ -409,36 +452,53 @@ una edición detrás no es trabajo, es la misma suite otra vez.
 
 **Y baja.** El hambre sube +1 por hora sin comer; al llegar a 10 deja de ser un
 aviso y empieza a costar **1 xp cada hora**, así que un bicho desatendido se
-desinfla: medio día fuera no se nota, a los **tres días** pierde el nivel 5 y
-hacia las seis semanas vuelve a larva. La xp además tiene techo —un tramo por
+desinfla: medio día fuera no se nota, a los **dos días y medio** pierde el
+último nivel y hacia los seis meses vuelve a larva. La xp además tiene techo —un tramo por
 encima del último umbral—, porque sin él el colchón acumulado se traga
 cualquier castigo y el bicho se queda a tope para siempre. Nunca muere: por
 abajo se queda en `chispa`, que es una forma, no una tumba.
 
-### El uso: el cuello más apretado
+### El uso: la ventana de esta sesión
 
 Un solo número entre 0 y 100 decide estado, ojos, patas y el peldaño de la rampa:
 
 ```
-uso = max(ctx, límite 5h, límite 7d)
+uso = context_window.used_percentage
 ```
 
-**Por qué el peor y no una media.** Aquí hubo una media ponderada 50/30/20, y
-diluía justo el caso que importa: con la ventana llena y las cuotas ociosas daba
-58 —«a gusto», turquesa— con el contexto agotado. El máximo es lo que medía la
-primera versión del proyecto, y su comentario sigue valiendo: *«no finge
-emociones; refleja el cuello más apretado»*.
+**Solo el contexto, y es a la tercera.** Aquí hubo una media ponderada 50/30/20 de
+contexto y las dos cuotas, y diluía justo el caso que importa: con la ventana
+llena y las cuotas ociosas daba 58 —«a gusto», turquesa— con el contexto agotado.
+Se cambió por el cuello más apretado, `max(ctx, 5h, 7d)`, que arregló eso y trajo
+otra cosa: **las cuotas son de la cuenta**, así que todas las sesiones abiertas
+leían el mismo número y el bicho dejaba de hablar de la sesión en la que vive —una
+ventana al 6% y otra al 64% las dos `cansada` por un límite de 5h al 81%, y un
+`/clear` que no cambiaba nada.
 
-A cambio, si tu límite de 7 días va por el 95% el bicho estará `drowning` toda la
-semana aunque abras la sesión con la ventana vacía. El razonamiento entero está
-en [vitals.md](docs/design/vitals.md).
+El contexto sí es una experiencia: una ventana llena es un Claude más lento y más
+espeso, y eso lo notas mientras trabajas. Una cuota al 81% no se nota en ninguna
+respuesta —se nota cuando te corta—, así que **no lleva cara, lleva número**. El
+razonamiento entero está en [vitals.md](docs/design/vitals.md).
 
-El que falta no compite: las cuentas por API no reciben `rate_limits`. El k.o.
-sigue siendo el único caso exacto —hace falta un 100% clavado—, pero ya no
-necesita un caso especial para llegar.
+Las cuotas siguen en la banda 1, pintadas con **esta misma escalera**: un `5h` al
+95 sale en el índigo de `drowning`, así que lo que está a punto de pararte es el
+color más fuerte de la línea aunque el bicho esté verde. Las cuentas por API no
+reciben `rate_limits` y no pierden nada: el bicho nunca las leyó para nada que no
+tuvieran.
 
-La **barra de contexto de la banda 1** se colorea con esta misma escalera, así que
-barra y bicho dejan de contradecirse.
+La **barra de la banda 1 mide ese mismo número**: largo, cifra y color son una
+sola medida, y por eso barra y bicho no pueden contradecirse.
+
+```
+████░░░░░░░░░░░░ 7% · 1M ctx │ xhigh │ 5h 82%  7d 21%
+```
+
+Las otras dos disposiciones se probaron y se leyeron como un fallo. Con la barra
+midiendo el contexto y **tomando prestado el color** del cuello, una sesión al 48%
+con la cuota de 5h al 67 dibujaba una barra a media asta junto a la palabra
+`espesa`, que es la lectura del 67. Ascendiendo la barra al cuello para cerrar esa
+grieta, la banda imprimía `82% 5h` tres columnas antes de imprimir `5h 82%` otra
+vez, y el contexto se quedaba con un `7%` suelto y sin barra.
 
 ### Ajustes por entorno
 
@@ -548,6 +608,35 @@ del CLI y va en morado, `ide` es una conexión y va en azul de enlace, el fondo 
 bloque de bash tira al morado de su borde, el de memoria al azul del suyo.
 
 Blood Red y Electric Blue siguen con 28 y heredan los otros 44.
+
+### Un fichero, muchas ventanas
+
+`~/.claude/pet.json` es **uno solo** para todas tus sesiones y todos tus repos,
+y el hook lo toca en **cada llamada a herramienta**. Como Claude Code lanza
+herramientas en paralelo, dos escrituras a la vez no son el caso raro: son el
+caso normal.
+
+El fichero se escribía con `rename`, que es atómico, y eso resuelve un problema
+distinto del que había: garantiza que nadie lea un json a medias, y no impide
+que dos escritores se pisen. Como cada escritura vuelca el estado **entero**, el
+que llega tarde no pierde solo lo suyo — devuelve al fichero todo lo que leyó, y
+deshace al otro. Medido antes de arreglarlo: **100 comidas en paralelo dejaban
+72 puntos de xp de 800**.
+
+Ahora toda modificación pasa por un candado (`pet.json.lock`, al lado, vacío):
+se lee y se escribe dentro de él, así que las 100 comidas dejan los 800 puntos.
+Es un `flock` del kernel, no un fichero centinela, de modo que un proceso que
+muera a media escritura lo suelta él solo y no deja nada atascado. Si el candado
+no se consigue en dos segundos, se escribe igualmente sin él: perder un punto de
+xp de vez en cuando es un arañazo, y un hook colgado bloquea la herramienta que
+tiene detrás.
+
+El mismo candado protege el registro de herramientas de la sesión, que se vacía
+cuando cierras una tarea del plan: se leía y se borraba en dos pasos, y lo que
+llegaba entre uno y otro se tiraba sin contar — 17.508 nombres de 24.000 bajo
+carga. Eso alimentaba `sniper`, que cuenta cuántas herramientas distintas usas
+entre dos tareas cerradas, y le hacía ver tareas de una sola herramienta que no
+lo eran.
 
 ## Limitación conocida
 
