@@ -371,26 +371,31 @@ parpadeo (`_ _`) es un solo frame cada siete refrescos. Al cruzar un umbral la
 etiqueta sale en negrita un refresco — para eso guarda el estado anterior en
 `$TMPDIR/claude-statusline-<session_id>`.
 
-### Hacia dónde va
+### La variante que lleva
 
-La banda 4 escribe entre corchetes la marca a la que apunta el bicho, pegada al
-nombre de lo que es ahora:
+La banda 4 escribe entre corchetes **la marca que el bicho lleva puesta**, con
+el oficio del que es variante fuera:
 
 ```
-cazabugs[sabueso] nivel 4 │ fresca ✦
+cazabugs[sabueso] nivel 5 │ fresca ✦
 ```
 
-De las dos marcas hermanas gana la de **hábito más maduro** —`hecho / umbral`,
-sin tope: 23 de 10 le gana a 14 de 15—, que es exactamente la cuenta que hará el
-árbol al llegar a nivel 5. Y es la misma que ya se usaba para la barra, solo que
-antes se enseñaba únicamente cuando ya no quedaba nivel por encima: justo cuando
-había dejado de servir para decidir nada.
+Se lee entero como un nombre: *un cazabugs, en su forma sabueso*. El árbol se
+bifurca en los niveles 2, 3 y 5, y la marca es la del 5, así que el corchete
+sale ahí y en ningún otro sitio: `cazabugs` en el nivel 4, `cazabugs[sabueso]`
+en el 5, y `lobo` a secas en el 6, donde el título es el final de la rama y no
+necesita contexto.
 
-**El corchete es el tiempo verbal.** Un nombre a secas dice *es*; el corchete
-dice *va hacia*, que es lo único honesto sobre una previsión — los contadores
-siguen moviéndose y una hermana puede adelantar. Se vacía cuando no hay nada en
-marcha, y con la marca ya puesta pasa a señalar el título: `sabueso[lobo]`. Es
-lo primero que la banda suelta al quedarse sin columnas, después del bocadillo.
+**Decía lo contrario y engañaba.** Escribía la marca a la que el bicho
+*apuntaba*, de modo que un nivel 4 leía `cazabugs[sabueso]` sin ser un sabueso.
+La idea era que el corchete fuese el tiempo verbal —un nombre dice *es*, un
+corchete dice *va hacia*—, y eso solo funciona si se ve: iba pintado en el color
+de la barra separadora, 1,54:1 contra el fondo frente al 11,8:1 de las dos
+palabras que lo rodean. Dos palabras brillantes pegadas sin nada visible en
+medio se leen como un nombre compuesto, que es exactamente lo que era.
+
+Es lo primero que la banda suelta al quedarse sin columnas, después del
+bocadillo. La mitad que queda sigue siendo cierta: un sabueso es un cazabugs.
 
 ### Lo que dice
 

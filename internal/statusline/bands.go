@@ -270,20 +270,24 @@ func petBand(c Card, columns int) []segment {
 		return out
 	}
 
-	// Where it is going, glued to what it is: `cazabugs[sabueso]`. The
-	// brackets are the tense - a name says "is", a bracket says "heading for"
-	// - and they are what makes the long silent stretch of level 4 readable at
-	// all. See Card.Toward.
+	// The mark, glued to the trade it is a variant of: `cazabugs[sabueso]`
+	// is a pet that IS a sabueso. See Card.Worn.
 	//
-	// No separator, because it is not a second thing on the line: it is part
-	// of the name. It drops just after the bubble and before everything else,
-	// which is the right order for a forecast sitting next to a fact.
-	if c.Toward != "" {
-		bracket := theme.Fg(theme.Rule) + "[" + theme.Reset +
-			theme.Fg(theme.Number) + c.Toward + theme.Reset +
-			theme.Fg(theme.Rule) + "]" + theme.Reset
+	// No separator, because it is not a second thing on the line: it is one
+	// name in two parts.
+	//
+	// The brackets are painted Dim and not Rule. Rule is the colour of the
+	// vertical bar, which is meant not to be seen - 1.54:1 against the
+	// background, against 11.8:1 for the two words it sits between - so what
+	// reached the eye was two bright words with nothing in between, and it
+	// read as one compound word. The punctuation carrying the whole meaning
+	// was the only part invisible.
+	if c.Worn != "" {
+		bracket := theme.Fg(theme.Dim) + "[" + theme.Reset +
+			theme.Fg(theme.Number) + c.Worn + theme.Reset +
+			theme.Fg(theme.Dim) + "]" + theme.Reset
 		out = append(out, seg(5, bracket).
-			truncatable(theme.Fg(theme.Number), "["+c.Toward+"]").withSep(""))
+			truncatable(theme.Fg(theme.Dim), "["+c.Worn+"]").withSep(""))
 	}
 
 	level := "nivel " + strconv.Itoa(c.Level)

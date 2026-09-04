@@ -166,31 +166,44 @@ larga, y la bifurcación decidida antes de que los hábitos hubieran tenido una
 semana para decir nada. Con 1600 el tramo ronda las **veinticinco horas** de
 trabajo.
 
-Estirarlo solo funciona si la espera se puede leer, y por eso el tramo largo
-llega junto con los corchetes de la banda 4 (ver abajo): el nivel 4 ya no es un
-número subiendo en silencio.
+Durante ese tramo la banda 4 dice `cazabugs` y nada más: la barra de XP es la
+que enseña el avance, y cuál de las dos marcas se está ganando no se anuncia
+—sigue en disputa hasta el final, que es justo lo que hace largo al nivel 4—.
+La fila `marca` de `/pet` sí lleva la cuenta de los dos hábitos.
 
-### Hacia dónde va: `cazabugs[sabueso]`
+### La variante que llevas: `cazabugs[sabueso]`
 
-La banda 4 escribe la marca a la que apuntas entre corchetes, pegada al nombre:
+La banda 4 escribe entre corchetes **la marca que el bicho lleva puesta**, con
+el oficio del que es variante fuera:
 
 ```
-cazabugs[sabueso] nivel 4 │ fresca ✦
+cazabugs[sabueso] nivel 5 │ fresca ✦
 ```
 
-Sale de `pet.NextMark`, que es exactamente la misma cuenta que hará el árbol al
-llegar a nivel 5: de las marcas hermanas, la de **hábito más maduro** —`hecho /
-umbral`, sin tope, así que 23 de 10 gana a 14 de 15—. Antes solo se enseñaba
-cuando ya no quedaba nivel por encima, es decir cuando ya no servía para
-decidir nada.
+Se lee entero como un nombre: *un cazabugs, en su forma sabueso*. El árbol se
+bifurca en los niveles 2, 3 y 5, y la marca es la bifurcación del 5 — así que
+el corchete aparece ahí y en ningún otro sitio:
 
-**Los corchetes son el tiempo verbal.** Un nombre a secas dice *es*; un
-corchete dice *va hacia*, y eso es lo único honesto que se puede decir de una
-previsión: los contadores siguen moviéndose, una hermana puede adelantar, y una
-secreta cancela la rama entera. Están vacíos cuando no hay nada en marcha —los
-dos hábitos a cero no apuntan a ningún sitio— y cuando el bicho ya lleva
-título, que no tiene nada detrás. Con la marca puesta pasan a señalar el
-título: `sabueso[lobo]`.
+| Nivel | Banda 4 | Por qué |
+| --- | --- | --- |
+| 4 | `cazabugs` | todavía no hay variante que nombrar |
+| 5 | `cazabugs[sabueso]` | la bifurcación, y por cuál fue |
+| 6 | `lobo` | el título es el final de la rama y no compite con nada |
+
+**El corchete decía lo contrario y engañaba.** Escribía la marca a la que el
+bicho *apuntaba*, así que un nivel 4 leía `cazabugs[sabueso]` sin ser un sabueso
+y sin garantía de llegar a serlo. La intención era que los corchetes fuesen el
+tiempo verbal —un nombre dice *es*, un corchete dice *va hacia*— pero eso solo
+funciona si se ven: iban pintados en `Rule`, el color de la barra separadora,
+que da **1,54:1** contra el fondo frente al **11,8:1** de las dos palabras entre
+las que se sientan. Lo que llegaba al ojo eran dos palabras brillantes pegadas
+sin nada en medio, y se leía como un nombre compuesto. La puntuación que
+cargaba todo el significado era lo único invisible. Ahora van en `Dim`.
+
+Es lo primero que la banda suelta al quedarse sin columnas, después del
+bocadillo. Perder el corchete cuesta algo real —cuál de las dos formas tomó el
+oficio— pero la mitad que queda en pie sigue siendo **cierta**: un sabueso es un
+cazabugs, así que `cazabugs` a secas es menos preciso y no es falso.
 
 Y dos secretas fuera del árbol: **phoenix** / *fénix* (llegar a hambre 10 y
 remontar a 0 en la misma sesión, solo desde `feral` o `marathon`) y **chimera** /

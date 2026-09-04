@@ -536,3 +536,18 @@ var titleForms = func() map[string]bool {
 	}
 	return out
 }()
+
+// MarkParent is the trade a mark is a variant of, and false for anything that
+// is not a mark.
+//
+// The fourteen marks are the level 5 fork: a `bloodhound` is one of the two
+// shapes a `bughunter` can take, and saying so is what band 4's bracket is for.
+// A trade has no mark yet and a title has outgrown the question, so both get
+// false and are printed on their own.
+func MarkParent(form string) (string, bool) {
+	if _, isMark := Unlocks[form]; !isMark {
+		return "", false
+	}
+	parent, ok := Parent[form]
+	return parent, ok
+}

@@ -49,22 +49,24 @@ type Card struct {
 	Done, Span int
 	Mark       string
 
-	// Toward is the mark the pet is HEADING for, in the canvas's Spanish, and
-	// it shows while the mark is still out of reach - which is most of the
-	// life of a pet, and used to be the stretch that said nothing at all.
+	// Worn is the MARK the pet is wearing, in the canvas's Spanish, and Form
+	// is then the trade it is a variant of. Band 4 prints them together:
+	// `cazabugs[sabueso]` is a pet that IS a sabueso, and a sabueso is one of
+	// the two shapes a cazabugs can take.
 	//
-	// The tree only forks at levels 2, 3 and 5, so a pet at level 4 reads
-	// "cazabugs nivel 4" for the whole climb with no hint of which of the two
-	// marks it is earning. The habit that decides it has been moving the whole
-	// time; only the screen was quiet. Band 4 prints it in brackets right
-	// after the form: `cazabugs[sabueso]`.
+	// The tree forks at levels 2, 3 and 5; the mark is the level 5 fork. So
+	// the bracket appears at level 5 and nowhere else:
 	//
-	// It is a FORECAST and says so by being a bracket rather than a name: the
-	// counters keep moving, a sibling can overtake, and a secret cancels the
-	// branch outright. Empty when nothing is under way - a pet with both
-	// habits still at zero is not heading anywhere yet - and empty for a title,
-	// which has nothing beyond it.
-	Toward string
+	//	nivel 4   cazabugs            no mark yet
+	//	nivel 5   cazabugs[sabueso]   the fork, and which way it went
+	//	nivel 6   lobo                the title needs no context
+	//
+	// It used to hold the OPPOSITE - the mark being headed for rather than the
+	// one worn - which put `cazabugs[sabueso]` on a level 4 pet that was not a
+	// sabueso and might never be. Two bright words with an all-but-invisible
+	// bracket between them read as one compound name, and the tense the
+	// bracket was carrying reached nobody.
+	Worn string
 
 	// LevelledUp says the bubble, if there is one, is the level announcement,
 	// so Spoke knows to move LevelSeen along with it.
@@ -193,14 +195,14 @@ func RenderCard(p *Payload, facts session.Facts, rate rateFacts, newTurn, bubble
 	// While there is a level above, the bar is XP. At the top it swaps to the
 	// habit that opens the next mark, which is the only progress left; a pet
 	// already wearing its mark has neither, and band 4 leans on the state.
-	// Asked once, read twice: the mark the pet is heading for names the
-	// bracket always, and becomes the bar itself once there is no level left
-	// to open. NextMark takes the form we have already walked, so this costs
-	// no second walk down the tree.
-	mark, heading := pet.NextMark(s, form)
-	if heading && mark.Share() > 0 {
-		out.Toward = pet.Name(mark.Form)
+	// The bracket is what the pet IS, not where it is going: a mark names
+	// itself inside it and its trade outside. See Card.Worn.
+	if parent, ok := pet.MarkParent(form); ok {
+		out.Form, out.Worn = pet.Name(parent), pet.Name(form)
 	}
+	// The bar, which is a different question: XP while there is a level left
+	// to open, and the habit that opens the next shape once there is not.
+	mark, heading := pet.NextMark(s, form)
 	if done, span, ok := pet.LevelProgress(s.XP); ok {
 		out.Done, out.Span = done, span
 	} else if heading {

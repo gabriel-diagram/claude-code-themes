@@ -257,17 +257,47 @@ func TestAFallenWalkNeverLowersTheStoredRung(t *testing.T) {
 
 // --- the bracket: where the pet is heading ----------------------------------
 
-func TestTheBracketNamesTheRipestSibling(t *testing.T) {
-	// The stretch this was built for: level 4, both marks still out of reach,
-	// and the habit that decides between them already leaning one way. The
-	// band used to print "cazabugs nivel 4" for the whole climb.
+// The bracket names the mark the pet IS WEARING, with the trade it is a
+// variant of outside it. `cazabugs[sabueso]` is a pet that is a sabueso, and a
+// sabueso is one of the two shapes a cazabugs can take.
+//
+// It held the opposite once - the mark being headed FOR - which printed
+// `cazabugs[sabueso]` on a level 4 pet that was not a sabueso and might never
+// be. Two bright words with an all-but-invisible bracket between them read as
+// one compound name, and the tense the bracket was carrying reached nobody.
+func TestTheBracketNamesTheMarkThePetIsWearing(t *testing.T) {
+	path := t.TempDir() + "/pet.json"
+	s := pet.New()
+	s.XP = xpFor(5)
+	s.Counters = map[string]int{
+		"inquisitive": 20, "tests": 20, // spark -> probe -> bughunter
+		"repro_before_fix": pet.Unlocks["bloodhound"].Threshold,
+	}
+	pet.Save(s, path)
+
+	card, _ := RenderCard(&Payload{Model: "M", ContextPc: ptr(7)},
+		session.Facts{}, rateFacts{}, false, false, path, time.Now())
+	if card.Worn != "sabueso" {
+		t.Errorf("wearing %q, want sabueso", card.Worn)
+	}
+	if card.Form != "cazabugs" {
+		t.Errorf("the trade outside the bracket is %q, want cazabugs", card.Form)
+	}
+	band := theme.Strip(assemble(petBand(card, 140), 140))
+	if !strings.Contains(band, "cazabugs[sabueso]") {
+		t.Errorf("band 4 is %q", band)
+	}
+}
+
+// A trade has not forked yet, so there is nothing to put in a bracket. This is
+// the case that used to lie: a forecast printed as if it were a fact.
+func TestATradeWearsNoBracket(t *testing.T) {
 	path := t.TempDir() + "/pet.json"
 	s := pet.New()
 	s.XP = xpFor(4)
 	s.Counters = map[string]int{
-		"inquisitive": 20, "tests": 20, // spark -> probe -> bughunter
-		"repro_before_fix": 23, // bloodhound asks 10
-		"test_streak":      1,  // exterminator asks 15
+		"inquisitive": 20, "tests": 20,
+		"repro_before_fix": 23, // well past bloodhound's threshold, and level 4
 	}
 	pet.Save(s, path)
 
@@ -276,82 +306,64 @@ func TestTheBracketNamesTheRipestSibling(t *testing.T) {
 	if card.Form != "cazabugs" || card.Level != 4 {
 		t.Fatalf("the pet is %s/%d, want cazabugs/4", card.Form, card.Level)
 	}
-	if card.Toward != "sabueso" {
-		t.Errorf("heading for %q, want sabueso", card.Toward)
-	}
-	band := theme.Strip(assemble(petBand(card, 140), 140))
-	if !strings.Contains(band, "cazabugs[sabueso]") {
-		t.Errorf("band 4 is %q", band)
-	}
-}
-
-func TestRipenessIsRelativeNotAbsolute(t *testing.T) {
-	// 14 of 15 is further along than 23 of 10 in raw count and NOT in
-	// ripeness, which is the ranking the tree itself uses. The bracket has to
-	// name the same winner the walk would, or it is a forecast of nothing.
-	path := t.TempDir() + "/pet.json"
-	s := pet.New()
-	s.XP = xpFor(4)
-	s.Counters = map[string]int{
-		"inquisitive": 20, "tests": 20,
-		"repro_before_fix": 23, // 2.3 of its threshold
-		"test_streak":      14, // 0.93 of its own
-	}
-	pet.Save(s, path)
-
-	card, _ := RenderCard(&Payload{Model: "M", ContextPc: ptr(7)},
-		session.Facts{}, rateFacts{}, false, false, path, time.Now())
-	if card.Toward != "sabueso" {
-		t.Errorf("the raw count won: heading for %q, want sabueso", card.Toward)
-	}
-}
-
-func TestNothingUnderWayShowsNoBracket(t *testing.T) {
-	// Both habits at zero is not a direction. A bracket there would be the
-	// tie-break order dressed up as a reading.
-	path := t.TempDir() + "/pet.json"
-	s := pet.New()
-	s.XP = xpFor(4)
-	s.Counters = map[string]int{"inquisitive": 20, "tests": 20}
-	pet.Save(s, path)
-
-	card, _ := RenderCard(&Payload{Model: "M", ContextPc: ptr(7)},
-		session.Facts{}, rateFacts{}, false, false, path, time.Now())
-	if card.Toward != "" {
-		t.Errorf("it claims to be heading for %q with both habits at zero", card.Toward)
+	if card.Worn != "" {
+		t.Errorf("a level 4 pet claims to wear %q", card.Worn)
 	}
 	if band := theme.Strip(assemble(petBand(card, 140), 140)); strings.Contains(band, "[") {
-		t.Errorf("band 4 drew an empty bracket: %q", band)
+		t.Errorf("band 4 drew a bracket on a trade: %q", band)
 	}
 }
 
-func TestAWornMarkPointsAtItsTitle(t *testing.T) {
-	// With the mark on, the bracket moves one rung along: sabueso[lobo]. The
-	// title asks for the same habit three times over, so there is always
-	// something under way by the time the mark is worn.
+// A title is the end of its branch and needs no context: `lobo`, on its own.
+func TestATitleWearsNoBracketEither(t *testing.T) {
 	path := t.TempDir() + "/pet.json"
 	s := pet.New()
-	s.XP = xpFor(5)
+	s.XP = xpFor(6)
 	s.Counters = map[string]int{
 		"inquisitive": 20, "tests": 20,
-		"repro_before_fix": pet.Unlocks["bloodhound"].Threshold,
+		"repro_before_fix": pet.Unlocks["bloodhound"].Threshold * 4,
 	}
 	pet.Save(s, path)
 
 	card, _ := RenderCard(&Payload{Model: "M", ContextPc: ptr(7)},
 		session.Facts{}, rateFacts{}, false, false, path, time.Now())
-	if card.Form != "sabueso" {
-		t.Fatalf("the pet is %s, want sabueso", card.Form)
+	if card.Form != "lobo" {
+		t.Fatalf("the pet is %s, want lobo", card.Form)
 	}
-	if card.Toward != "lobo" {
-		t.Errorf("heading for %q, want lobo", card.Toward)
+	if card.Worn != "" {
+		t.Errorf("a title claims to wear %q", card.Worn)
+	}
+}
+
+// The brackets are painted Dim, not Rule. Rule is the vertical bar's colour
+// and is meant not to be seen - 1.54:1 against the background, against 11.8:1
+// for the two words it sits between - so what reached the eye was two bright
+// words with nothing between them, read as one compound word. The punctuation
+// carrying the whole meaning was the only part invisible.
+func TestTheBracketsAreVisible(t *testing.T) {
+	card := Card{Form: "cazabugs", Worn: "sabueso", Level: 5,
+		State: "fresca", Vital: pet.StateFor(7)}
+	band := assemble(petBand(card, 140), 140)
+
+	rule := theme.Fg(theme.Rule) + "["
+	if strings.Contains(band, rule) {
+		t.Error("the brackets are still painted in the separator's colour")
+	}
+	if !strings.Contains(band, theme.Fg(theme.Dim)+"[") {
+		t.Errorf("the brackets are not Dim: %q", band)
 	}
 }
 
 func TestTheBracketGoesBeforeTheStateWhenColumnsRunOut(t *testing.T) {
-	// A forecast is the first thing to give up its columns after the bubble:
-	// what the pet IS and how it feels outrank where it is going.
-	card := Card{Form: "cazabugs", Toward: "sabueso", Level: 4,
+	// The bracket is the first thing to give up its columns after the bubble.
+	//
+	// It is part of the name now rather than a forecast, so dropping it costs
+	// something real - which of the two shapes the trade took. What makes it
+	// affordable is that the half left standing is still TRUE: a sabueso is a
+	// cazabugs, so `cazabugs` on its own is less specific and not wrong. The
+	// state cannot be dropped the same way - there is no vaguer version of
+	// "fresca" - so it outranks the bracket.
+	card := Card{Form: "cazabugs", Worn: "sabueso", Level: 5,
 		State: "fresca", Vital: pet.StateFor(7), Bubble: "algo"}
 
 	full := theme.Strip(assemble(petBand(card, 140), 140))
