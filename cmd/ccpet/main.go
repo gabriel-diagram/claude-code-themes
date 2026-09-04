@@ -11,6 +11,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,51 +27,55 @@ import (
 // version is stamped at build time with -ldflags "-X main.version=...".
 var version = "dev"
 
-func main() {
-	args := os.Args[1:]
-	now := time.Now()
+func main() { os.Exit(run(os.Args, os.Stdin, os.Stdout, os.Stderr, time.Now())) }
+
+// run is main with its edges handed in, so the dispatch can be tested. It
+// returns the exit code rather than calling os.Exit, which is the only reason
+// main is one line.
+func run(argv []string, stdin io.Reader, stdout, stderr io.Writer, now time.Time) int {
+	args := argv[1:]
 
 	// argv[0] can carry the command. ~/.claude/ccpet-statusline is a symlink to
 	// this binary, which lets settings.json hold a bare path with no arguments:
 	// the shape that works whether or not the host uses a shell.
-	if strings.Contains(filepath.Base(os.Args[0]), "statusline") {
-		if err := statusline.Run(os.Stdin, os.Stdout); err != nil {
-			os.Exit(1)
+	if strings.Contains(filepath.Base(argv[0]), "statusline") {
+		if err := statusline.Run(stdin, stdout); err != nil {
+			return 1
 		}
-		return
+		return 0
 	}
 
 	if len(args) > 0 {
 		switch args[0] {
 		case "statusline":
-			if err := statusline.Run(os.Stdin, os.Stdout); err != nil {
-				os.Exit(1)
+			if err := statusline.Run(stdin, stdout); err != nil {
+				return 1
 			}
-			return
+			return 0
 		case "hook":
-			os.Exit(hook.Run(os.Stdin, pet.Path(), now))
+			return hook.Run(stdin, pet.Path(), now)
 		case "setup":
-			os.Exit(runSetup(args[1:]))
+			return runSetup(args[1:], stdout, stderr)
 		case "link":
 			root := ""
 			if len(args) > 1 {
 				root = args[1]
 			}
-			setup.RunLink(os.Stdout, root)
-			return
+			setup.RunLink(stdout, root)
+			return 0
 		case "version", "--version", "-v":
-			fmt.Println(version)
-			return
+			fmt.Fprintln(stdout, version)
+			return 0
 		case "-h", "--help", "help":
-			fmt.Print(usage)
-			return
+			fmt.Fprint(stdout, usage)
+			return 0
 		}
 	}
-	os.Exit(panel.Run(args, os.Stdout, os.Stderr, pet.Path(), now))
+	return panel.Run(args, stdout, stderr, pet.Path(), now)
 }
 
 // runSetup writes the one settings.json key a plugin cannot install by itself.
-func runSetup(args []string) int {
+func runSetup(args []string, stdout, stderr io.Writer) int {
 	action := "on"
 	if len(args) > 0 && args[0] != "" {
 		action = args[0]
@@ -86,21 +91,21 @@ func runSetup(args []string) int {
 	var err error
 	switch action {
 	case "on":
-		err = setup.On(os.Stdout, root)
+		err = setup.On(stdout, root)
 	case "off":
-		err = setup.Off(os.Stdout)
+		err = setup.Off(stdout)
 	case "status":
-		err = setup.Status(os.Stdout)
+		err = setup.Status(stdout)
 	case "install", "install-hooks":
-		err = setup.Install(os.Stdout, root, action == "install-hooks")
+		err = setup.Install(stdout, root, action == "install-hooks")
 	case "uninstall":
-		err = setup.Uninstall(os.Stdout)
+		err = setup.Uninstall(stdout)
 	default:
-		fmt.Fprintln(os.Stderr, "uso: ccpet setup {on|off|status|install|install-hooks|uninstall} [raíz]")
+		fmt.Fprintln(stderr, "uso: ccpet setup {on|off|status|install|install-hooks|uninstall} [raíz]")
 		return 2
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "ccpet:", err)
+		fmt.Fprintln(stderr, "ccpet:", err)
 		return 1
 	}
 	return 0
@@ -131,4 +136,5 @@ const usage = `ccpet - la statusline del tema Terminal y su bicho.
   ccpet setup install         instalación sin plugin (install-hooks incluye los hooks)
   ccpet setup uninstall       deshacerlo
   ccpet version               imprime la versión
+  ccpet help                  esta ayuda (también -h y --help)
 `

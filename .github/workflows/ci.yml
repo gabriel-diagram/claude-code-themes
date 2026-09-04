@@ -1,0 +1,59 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "not gofmt'd:"; echo "$unformatted"; exit 1
+          fi
+      - run: go vet ./...
+      - run: go test -race ./...
+      - name: shell syntax
+        run: for f in bin/ccpet scripts/*.sh; do bash -n "$f"; done
+      - name: json is json
+        run: |
+          for f in .claude-plugin/*.json hooks/hooks.json themes/*.json; do
+            python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f"
+          done
+
+  binaries-match-the-source:
+    # The five builds under bin/ are committed, because the plugin is installed
+    # by cloning this repo. That only works if they are actually current.
+    #
+    # go-version-file rather than `stable` on purpose: a Go build is
+    # reproducible byte for byte with the SAME toolchain and not with any
+    # toolchain, so pinning to go.mod is what makes this comparison mean
+    # anything. With `stable` the job would go red the day the runner moves
+    # ahead of whoever last ran scripts/build.sh, and the failure would say
+    # "bin/ is stale" while bin/ was perfectly current.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: scripts/build.sh
+      - name: bin/ is up to date
+        run: |
+          if ! git diff --quiet -- bin/; then
+            echo "bin/ is stale - run scripts/build.sh and commit the result"
+            git diff --stat -- bin/
+            exit 1
+          fi
