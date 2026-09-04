@@ -255,6 +255,9 @@ Lo único a mano son las variables de entorno, si las tenías puestas:
 - [runtime.md](docs/design/runtime.md) — por qué Go, a dónde va el tiempo, el
   candado del `pet.json` y por qué los binarios van en el repo
 - [audit-log.md](docs/audit-log.md) — histórico: la auditoría de la versión Python
+- [umbrales.md](docs/design/umbrales.md) — **sin implementar**: el árbol de 97 formas
+  del lienzo de diseño, por qué su regla deja la mitad fuera de alcance, y el arreglo
+  con sus ritmos medidos
 
 ## Licencia
 
