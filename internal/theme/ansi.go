@@ -136,3 +136,34 @@ func Bar(value, total float64, width int, full, empty Colour) string {
 	return Fg(full) + strings.Repeat("█", filled) +
 		Fg(empty) + strings.Repeat("░", width-filled) + Reset
 }
+
+// OneLine flattens text that has to share a row with something else.
+//
+// The statusline is a FIXED number of rows - the prompt box is drawn assuming
+// it - and a single newline in a name adds one. It does not take malice: a
+// directory called $'proyecto\nnuevo' is legal on every POSIX filesystem, and
+// with it the footer printed six rows instead of five, the prompt lost its
+// square and the pet came apart down the middle.
+//
+// Every C0 and C1 control goes, ESC among them, which also means a name that
+// arrives carrying escape sequences cannot repaint the rest of the band. Both
+// are the same rule: text from outside is TEXT, and only this package decides
+// what a row looks like.
+//
+// A control becomes a space rather than disappearing, so "a\nb" stays two words
+// instead of silently becoming one.
+func OneLine(s string) string {
+	if strings.IndexFunc(s, isControl) < 0 {
+		return s // the usual case, and it allocates nothing
+	}
+	return strings.Map(func(r rune) rune {
+		if isControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
+}
+
+func isControl(r rune) bool {
+	return r < 0x20 || (r >= 0x7F && r < 0xA0)
+}

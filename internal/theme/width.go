@@ -179,12 +179,65 @@ func RuneWidth(r rune) int {
 	return 1
 }
 
+// Codepoints that change what the RUNE BEFORE them draws, rather than drawing
+// anything themselves. RuneWidth cannot see them - it is handed one rune with
+// no context - so StringWidth is where they are dealt with.
+const (
+	zwj = '\u200D' // ZERO WIDTH JOINER: fuses the next emoji into this one
+
+	skinToneLo = '\U0001F3FB' // EMOJI MODIFIER FITZPATRICK TYPE-1-2
+	skinToneHi = '\U0001F3FF' // ...TYPE-6
+)
+
 // StringWidth is the cells a plain string occupies. It expects the escapes to
 // be gone already; Width strips them first.
+//
+// Summing RuneWidth over the runes is right until an emoji is built out of
+// several of them, and then it counts the parts instead of the glyph:
+//
+//	👨‍👩‍👧  three emoji joined by two ZWJ -> counted 6, drawn 2
+//	👍🏽    a thumb plus a skin tone       -> counted 4, drawn 2
+//
+// Both were OVER-counts, which is the direction that truncates, so both are
+// corrected here. VARIATION SELECTOR-16 is the case that is NOT corrected: it
+// asks for the emoji presentation of a character that is otherwise text, and
+// whether a terminal gives it two cells depends on the font. That is the
+// ambiguous width the table above deliberately leaves out, and the same
+// reasoning applies - ❤️ stays at one cell, because guessing narrow leaves a
+// gap and guessing wide truncates.
+//
+// The ZWJ one was found in the layout rather than in this function: a branch
+// called familia-👨‍👩‍👧 made band 2 report four columns more than the terminal
+// drew, and the pet's block slid four cells left on that row alone while the
+// other three stayed put. A creature that comes apart across the screen is the
+// same bug the rune count had, one Unicode level further in.
 func StringWidth(s string) int {
-	n := 0
+	n, group := 0, 0 // group is the ZWJ sequence being assembled, if any
+	joined := false  // the previous rune was a ZWJ: this one melts into it
 	for _, r := range s {
-		n += RuneWidth(r)
+		switch {
+		case r == zwj:
+			joined = true
+			continue
+		case r >= skinToneLo && r <= skinToneHi:
+			continue // paints the emoji before it; adds no cell of its own
+		}
+		w := RuneWidth(r)
+		if w == 0 && !joined {
+			continue // a combining mark or a selector: hangs off the last cell
+		}
+		if joined {
+			// The glyph is as wide as its widest part, not the sum of them.
+			// 🏳️‍🌈 is a narrow flag joined to a wide rainbow and draws two
+			// cells, so keeping only the first would have under-counted it.
+			joined = false
+			if w > group {
+				group = w
+			}
+			continue
+		}
+		n += group
+		group = w
 	}
-	return n
+	return n + group
 }

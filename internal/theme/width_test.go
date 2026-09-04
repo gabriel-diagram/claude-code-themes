@@ -75,3 +75,40 @@ func TestTruncateCutsToCellsAndNeverSplitsAGlyph(t *testing.T) {
 		}
 	}
 }
+
+// An emoji built out of several runes is one glyph, and the layout has to
+// measure the glyph. Counting the parts was found in the statusline rather than
+// here: a branch called familia-👨‍👩‍👧 made band 2 report four columns more
+// than the terminal drew, and the pet's block slid four cells left on that row
+// while the other three stayed put.
+func TestAMultiRuneEmojiIsOneGlyph(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		s    string
+		want int
+	}{
+		{"three emoji joined by ZWJ", "👨‍👩‍👧", 2},
+		{"two joined by ZWJ", "👩‍💻", 2},
+		{"a skin tone modifier", "👍\U0001F3FD", 2},
+		{"a skin tone inside a ZWJ group", "👋\U0001F3FD‍♀️", 2},
+		{"a flag is two regional indicators", "🇪🇸", 2},
+		{"a narrow flag joined to a wide rainbow", "🏳️‍🌈", 2},
+		{"a black flag joined to a skull", "🏴‍☠️", 2},
+		{"a plain emoji is still two", "🔥", 2},
+		{"text around a joined emoji", "wip-👩‍💻-x", 8},
+	} {
+		if got := StringWidth(tc.s); got != tc.want {
+			t.Errorf("%s: %q measured %d, want %d", tc.name, tc.s, got, tc.want)
+		}
+	}
+}
+
+// VARIATION SELECTOR-16 is deliberately NOT promoted: whether the terminal
+// gives ❤️ two cells depends on the font, which is the ambiguous width this
+// package leaves narrow on purpose. Pinned so the decision is not undone by
+// somebody fixing what looks like an omission.
+func TestTheEmojiVariationSelectorStaysNarrow(t *testing.T) {
+	if got := StringWidth("❤️"); got != 1 {
+		t.Errorf("❤️ measured %d, want 1 - see the note on ambiguous widths", got)
+	}
+}
