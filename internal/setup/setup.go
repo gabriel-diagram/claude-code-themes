@@ -18,6 +18,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/gabriel-diagram/claude-code-themes/internal/config"
 )
 
 // hookMark is how our hook entries are recognised in settings.json.
@@ -28,16 +30,7 @@ const hookMark = "ccpet"
 var hookEvents = []string{"PostToolUse", "PreCompact", "SessionEnd"}
 
 // ConfigDir is ~/.claude, or CLAUDE_CONFIG_DIR when set.
-func ConfigDir() string {
-	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
-		return dir
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = os.Getenv("HOME")
-	}
-	return filepath.Join(home, ".claude")
-}
+func ConfigDir() string { return config.Dir() }
 
 // SettingsPath is the file this package edits.
 func SettingsPath() string { return filepath.Join(ConfigDir(), "settings.json") }

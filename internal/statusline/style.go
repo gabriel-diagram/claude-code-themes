@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/gabriel-diagram/claude-code-themes/internal/config"
 )
 
 // Resolving the output style, which is the difference between the band saying
@@ -176,13 +178,4 @@ func styleResolves(name, configDir, repoRoot string) bool {
 
 // configDir is ~/.claude, the same way pet.Path spells it. CLAUDE_CONFIG_DIR
 // moves it and the CLI honours that, so this does too.
-func configDir() string {
-	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
-		return dir
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = os.Getenv("HOME")
-	}
-	return filepath.Join(home, ".claude")
-}
+func configDir() string { return config.Dir() }

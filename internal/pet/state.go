@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/gabriel-diagram/claude-code-themes/internal/config"
 )
 
 // The life file - ~/.claude/pet.json.
@@ -195,13 +197,7 @@ func asString(v any) string {
 }
 
 // Path is where the life file lives.
-func Path() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = os.Getenv("HOME")
-	}
-	return filepath.Join(home, ".claude", "pet.json")
-}
+func Path() string { return filepath.Join(config.Dir(), "pet.json") }
 
 // Load never fails and never hands back a field with the wrong type.
 func Load(path string) *State {

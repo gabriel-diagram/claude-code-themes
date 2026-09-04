@@ -2,10 +2,45 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gabriel-diagram/claude-code-themes/internal/pet"
 )
+
+// TestMain puts HOME somewhere disposable for EVERY test in this package.
+//
+// pet.Path() reads the config directory, and the dispatch reaches it through
+// panel.Run and hook.Run without being handed a path - so a test that only
+// isolates CLAUDE_CONFIG_DIR still writes to the real ~/.claude/pet.json. One
+// did: a test that swept the usage text ran `ccpet day --dry` against the
+// author's own pet and left a counter called "--dry" in it. Setting it here
+// rather than per-test means the next test cannot forget.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "ccpet-test-home-")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("HOME", dir)
+	os.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(dir, ".claude"))
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
+}
+
+// And a test that says so, because a TestMain is easy to delete by accident.
+//
+// It checks where pet.Path LANDS and not what HOME holds: on Linux
+// os.UserHomeDir IS $HOME, so comparing the two only ever compares a value
+// with itself.
+func TestTheTestHomeIsNotTheRealOne(t *testing.T) {
+	if !strings.Contains(pet.Path(), "ccpet-test-home-") {
+		t.Fatalf("pet.Path() is %q: these tests would write to a live pet.json", pet.Path())
+	}
+}
 
 func call(t *testing.T, argv []string, stdin string) (code int, out, errOut string) {
 	t.Helper()
@@ -148,7 +183,6 @@ func TestLinkAndPanel(t *testing.T) {
 	})
 
 	t.Run("no arguments draws the panel", func(t *testing.T) {
-		t.Setenv("HOME", t.TempDir())
 		code, out, e := call(t, []string{"ccpet"}, "")
 		if code != 0 {
 			t.Fatalf("exit %d: %s", code, e)
@@ -159,7 +193,6 @@ func TestLinkAndPanel(t *testing.T) {
 	})
 
 	t.Run("something that is not a meal says so", func(t *testing.T) {
-		t.Setenv("HOME", t.TempDir())
 		code, _, errOut := call(t, []string{"ccpet", "bananas"}, "")
 		if code != 2 {
 			t.Errorf("exit %d, want 2", code)
@@ -170,7 +203,6 @@ func TestLinkAndPanel(t *testing.T) {
 	})
 
 	t.Run("a meal is eaten", func(t *testing.T) {
-		t.Setenv("HOME", t.TempDir())
 		if code, _, e := call(t, []string{"ccpet", "commit"}, ""); code != 0 {
 			t.Errorf("exit %d: %s", code, e)
 		}
